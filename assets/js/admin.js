@@ -33,7 +33,7 @@
         function generate_btn_txt() {
             var merchantIdField = document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]');
             if (merchantIdField && merchantIdField.value) {
-                $('#zwennpay-generate-preview').text('Generate New Preview');
+                $('#zwennpay-generate-preview').text('Reload');
             }
         }
         generate_btn_txt();
@@ -75,86 +75,70 @@
         // Load logs on page load
         loadLogs(1);
 
-        function generateQR(incrementCounter) {
-            var $qrDiv = $('#zwennpay-preview-qr');
-            var $text = $('#zwennpay-preview-text');
-            var $amount = $('#zwennpay-preview-amount');
-            var $logo = $('.Zvenn-Pay-logo');
+function generateQR(incrementCounter) {
+    var $qrDiv = $('#zwennpay-preview-qr');
+    var $text = $('#zwennpay-preview-text');
+    var $amount = $('#zwennpay-preview-amount');
+    var $logo = $('.Zvenn-Pay-logo');
 
-            $qrDiv.hide().empty();
-            $amount.hide();
-            $('.zwennpay-merchant-info').remove();
-            $text.show().text('Generating QR code...');
+    $qrDiv.hide().empty();
+    $amount.hide();
+    $('.zwennpay-merchant-info').remove();
+    $text.show().text('Reload QR code...');
 
-            $.ajax({
-                url: zwennpayAdmin.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'zwennpay_generate_qr_admin',
-                    nonce: zwennpayAdmin.nonce,
-                    increment_counter: incrementCounter ? 'true' : 'false'
-                },
-                success: function(response) {
-                    if (response.success && response.qr_data) {
-                        $text.hide();
-                        $qrDiv.show();
+    $.ajax({
+        url: zwennpayAdmin.ajaxUrl,
+        type: 'POST',
+        data: {
+            action: 'zwennpay_generate_qr_admin',
+            nonce: zwennpayAdmin.nonce,
+            increment_counter: incrementCounter ? 'true' : 'false'
+        },
+        success: function(response) {
+            if (response.success && response.qr_data) {
+                $text.hide();
+                $qrDiv.show();
 
-                        var size = parseInt($('input[name="zwennpay_qr_options[qr_size]"]').val()) || 200;
-                        var color = $('input[name="zwennpay_qr_options[qr_color]"]').val() || '#000000';
-                        var amount = parseFloat($('input[name="zwennpay_qr_options[transaction_amount]"]').val()) || 0;
+                var size = parseInt($('input[name="zwennpay_qr_options[qr_size]"]').val()) || 200;
+                var color = $('input[name="zwennpay_qr_options[qr_color]"]').val() || '#000000';
+                var amount = parseFloat($('input[name="zwennpay_qr_options[transaction_amount]"]').val()) || 0;
 
-                        $qrDiv.html('<img src="' + response.qr_data + '" alt="QR Code" style="display:block;margin:0 auto;">');
+                $qrDiv.html('<img src="' + response.qr_data + '" alt="QR Code" style="display:block;margin:0 auto;">');
 
-                        if (response.merchant_name || response.merchant_city) {
-                            var infoHtml = '<div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">';
-                            if (response.merchant_name) {
-                                infoHtml += '<strong style="display:block;">' + response.merchant_name + '</strong>';
-                            }
-                            if (response.merchant_city) {
-                                infoHtml += '<span style="display:block; color: #666;">' + response.merchant_city + '</span>';
-                            }
-                            infoHtml += '</div>';
-                            $logo.after(infoHtml);
-                        }
-
-                        if (amount > 0 && $('input[name="zwennpay_qr_options[show_amount]"]').is(':checked')) {
-                            $amount.text('Amount: ' + amount.toFixed(2)).show();
-                        }
-
-                        // Refresh logs if a new entry was logged
-                        if (response.logged) {
-                            loadLogs(1);
-                        }
-
-                        $('#zwennpay-generate-preview').prop('disabled', false).text('Generate Preview');
-                        generate_btn_txt();
-
-                    } else {
-                        $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');
-                        $('#zwennpay-generate-preview').prop('disabled', false).text('Generate Preview');
+                if (response.merchant_name || response.merchant_city) {
+                    var infoHtml = '<div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">';
+                    if (response.merchant_name) {
+                        infoHtml += '<strong style="display:block;">' + response.merchant_name + '</strong>';
                     }
-                },
-                error: function(xhr, status, error) {
-                        var errorMsg = zwennpayAdmin.strings.error_loading;
-                        
-                        // Try to get more specific error from response
-                        if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-                            errorMsg = xhr.responseJSON.data.message;
-                        } else if (xhr.status === 0) {
-                            errorMsg = 'Connection error - please refresh the page';
-                        } else if (xhr.status) {
-                            errorMsg = 'Server error (' + xhr.status + ')';
-                        }
-                        
-                        $body.html(
-                            '<tr><td colspan="3" style="text-align: center; padding: 30px; color: #dc3232;">' +
-                            '<span class="dashicons dashicons-dismiss" style="font-size: 40px; width: 40px; height: 40px;"></span><br>' +
-                            '<strong>' + errorMsg + '</strong>' +
-                            '</td></tr>'
-                        );
+                    if (response.merchant_city) {
+                        infoHtml += '<span style="display:block; color: #666;">' + response.merchant_city + '</span>';
                     }
-            });
+                    infoHtml += '</div>';
+                    $logo.after(infoHtml);
+                }
+
+                if (amount > 0 && $('input[name="zwennpay_qr_options[show_amount]"]').is(':checked')) {
+                    $amount.text('Amount: ' + amount.toFixed(2)).show();
+                }
+
+                // Refresh the history log if a new unique entry was just saved
+                if (response.logged) {
+                    loadLogs(1);
+                }
+
+                $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
+
+            } else {
+                $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');
+                $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
+            }
+        },
+        error: function(xhr, status, error) {
+            $text.html('<span style="color:red;">Error: ' + error + '</span>');
+            $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
         }
+    });
+}
 
         /**
          * Load QR logs with pagination

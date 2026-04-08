@@ -21,7 +21,7 @@ class ZwennPay_QR_Generator {
     const LOGS_PER_PAGE = 10;
 
 public function __construct() {
-    // Ensure log table exists (handles case where code was added after activation)
+    // Ensure log table exists
     add_action('admin_init', array($this, 'ensure_log_table_exists'), 1);
 
     add_action('admin_menu', array($this, 'add_admin_menu'));
@@ -36,6 +36,8 @@ public function __construct() {
     add_action('wp_ajax_nopriv_zwennpay_generate_qr', array($this, 'ajax_generate_qr'));
     add_action('wp_ajax_zwennpay_get_qr_logs', array($this, 'ajax_get_qr_logs'));
     add_action('wp_ajax_zwennpay_delete_qr_logs', array($this, 'ajax_delete_qr_logs'));
+    // Log on settings save — only if settings changed from last log
+    add_action('update_option_' . self::OPTION_NAME, array($this, 'on_settings_saved'), 10, 2);
     add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_plugin_links'));
 }
 
@@ -496,6 +498,128 @@ public function ajax_delete_qr_logs() {
     wp_send_json_success(array('message' => __('Logs deleted successfully', 'zwennpay-qr')));
 }
 
+/**
+ * Fired after settings are saved.
+ * Generates QR and logs it ONLY if settings differ from last log entry.
+ */
+public function on_settings_saved($old_value, $new_value) {
+    // Ensure table exists
+    $this->ensure_log_table_exists();
+
+    // Skip if merchant_id is empty
+    if (empty($new_value['merchant_id'])) {
+        return;
+    }
+
+    // Get last log entry
+    $last_log = $this->get_last_log();
+
+    if ($last_log) {
+        $last_settings = json_decode($last_log['settings'], true);
+        if ($this->settings_equal($last_settings, $new_value)) {
+            return;
+        }
+    }
+
+    // Generate QR via API
+    $result = $this->api_request();
+
+    if (!$result['success'] || empty($result['data'])) {
+        return;
+    }
+
+    // Generate QR image using temp file (safe during option save)
+    $qr_base64 = $this->generate_qr_base64($result['data'], 256);
+
+    if (empty($qr_base64)) {
+        return;
+    }
+
+    $parsed = $this->parse_emv_data($result['data']);
+    $merchant_name = isset($parsed['59']) ? $parsed['59'] : '';
+    $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
+
+    $log_settings = array(
+        'merchant_id'                => $new_value['merchant_id'],
+        'transaction_amount'         => $new_value['transaction_amount'],
+        'convenience_tip'            => $new_value['convenience_tip'],
+        'convenience_fee_fixed'      => $new_value['convenience_fee_fixed'],
+        'convenience_fee_percentage' => $new_value['convenience_fee_percentage'],
+        'bill_number'                => $new_value['bill_number'],
+        'mobile_no'                  => $new_value['mobile_no'],
+        'store_label'                => $new_value['store_label'],
+        'loyalty_number'             => $new_value['loyalty_number'],
+        'customer_label'             => $new_value['customer_label'],
+        'terminal_label'             => $new_value['terminal_label'],
+        'purpose_transaction'        => $new_value['purpose_transaction'],
+        'reference_label'            => isset($new_value['reference_label']) ? $new_value['reference_label'] : '',
+        'qr_size'                    => $new_value['qr_size'],
+        'qr_color'                   => $new_value['qr_color'],
+        'merchant_name'              => $merchant_name,
+        'merchant_city'              => $merchant_city,
+    );
+
+    $this->add_qr_log($qr_base64, $log_settings);
+}
+
+/**
+ * Get the most recent log entry (settings column only)
+ */
+private function get_last_log() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . self::LOG_TABLE;
+
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'");
+    if ($table_exists !== $table_name) {
+        return null;
+    }
+
+    return $wpdb->get_row(
+        "SELECT settings FROM $table_name ORDER BY created_at DESC LIMIT 1",
+        ARRAY_A
+    );
+}
+
+/**
+ * Compare relevant settings fields between last log and new saved values
+ */
+private function settings_equal($old_settings, $new_value) {
+    if (!is_array($old_settings)) {
+        return false;
+    }
+
+    // Only compare fields that actually affect QR generation
+    $compare_fields = array(
+        'merchant_id',
+        'transaction_amount',
+        'convenience_tip',
+        'convenience_fee_fixed',
+        'convenience_fee_percentage',
+        'bill_number',
+        'mobile_no',
+        'store_label',
+        'loyalty_number',
+        'customer_label',
+        'terminal_label',
+        'purpose_transaction',
+        'reference_label',
+        'qr_size',
+        'qr_color',
+    );
+
+    foreach ($compare_fields as $field) {
+        $old_val = isset($old_settings[$field]) ? $old_settings[$field] : '';
+        $new_val = isset($new_value[$field]) ? $new_value[$field] : '';
+
+        // Cast both to string for safe comparison
+        if ((string) $old_val !== (string) $new_val) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
     public function ajax_test_connection() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(array('message' => 'Unauthorized'));
@@ -526,61 +650,79 @@ public function ajax_delete_qr_logs() {
         wp_send_json(array('success' => $result['success'], 'data' => $result));
     }
 
-    public function ajax_generate_qr_admin() {
-        check_ajax_referer('zwennpay_qr_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => 'Unauthorized'));
-        }
-
-        $increment = isset($_POST['increment_counter']) && $_POST['increment_counter'] === 'true';
-
-        $result = $this->api_request();
-
-        $merchant_name = '';
-        $merchant_city = '';
-
-        if ($result['success'] && !empty($result['data'])) {
-            $parsed = $this->parse_emv_data($result['data']);
-            $merchant_name = isset($parsed['59']) ? $parsed['59'] : '';
-            $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
-        }
-
-        $qr_base64 = $this->generate_qr_base64($result['data'], 256);
-
-        // Save to log if increment was requested and QR was generated successfully
-        if ($increment && $result['success'] && !empty($qr_base64)) {
-            $options = $this->get_options();
-            $log_settings = array(
-                'merchant_id' => $options['merchant_id'],
-                'transaction_amount' => $options['transaction_amount'],
-                'convenience_tip' => $options['convenience_tip'],
-                'convenience_fee_fixed' => $options['convenience_fee_fixed'],
-                'convenience_fee_percentage' => $options['convenience_fee_percentage'],
-                'bill_number' => $options['bill_number'],
-                'mobile_no' => $options['mobile_no'],
-                'store_label' => $options['store_label'],
-                'loyalty_number' => $options['loyalty_number'],
-                'customer_label' => $options['customer_label'],
-                'terminal_label' => $options['terminal_label'],
-                'purpose_transaction' => $options['purpose_transaction'],
-                'qr_size' => $options['qr_size'],
-                'qr_color' => $options['qr_color'],
-                'merchant_name' => $merchant_name,
-                'merchant_city' => $merchant_city,
-            );
-            $this->add_qr_log($qr_base64, $log_settings);
-        }
-
-        wp_send_json(array(
-            'success' => $result['success'],
-            'qr_data' => $qr_base64,
-            'merchant_name' => $merchant_name,
-            'merchant_city' => $merchant_city,
-            'error' => $result['error'],
-            'debug' => $result['debug'],
-            'logged' => ($increment && $result['success']),
-        ));
+public function ajax_generate_qr_admin() {
+    check_ajax_referer('zwennpay_qr_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Unauthorized'));
     }
+
+    $logged = false;
+    $result = $this->api_request();
+
+    $merchant_name = '';
+    $merchant_city = '';
+
+    if ($result['success'] && !empty($result['data'])) {
+        $parsed = $this->parse_emv_data($result['data']);
+        $merchant_name = isset($parsed['59']) ? $parsed['59'] : '';
+        $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
+    }
+
+    $qr_base64 = $this->generate_qr_base64($result['data'], 256);
+
+    // Log via AJAX if QR was successful and settings differ from last log
+    if ($result['success'] && !empty($qr_base64)) {
+        $options = $this->get_options();
+        
+        $log_settings = array(
+            'merchant_id'                => $options['merchant_id'],
+            'transaction_amount'         => $options['transaction_amount'],
+            'convenience_tip'            => $options['convenience_tip'],
+            'convenience_fee_fixed'      => $options['convenience_fee_fixed'],
+            'convenience_fee_percentage' => $options['convenience_fee_percentage'],
+            'bill_number'                => $options['bill_number'],
+            'mobile_no'                  => $options['mobile_no'],
+            'store_label'                => $options['store_label'],
+            'loyalty_number'             => $options['loyalty_number'],
+            'customer_label'             => $options['customer_label'],
+            'terminal_label'             => $options['terminal_label'],
+            'purpose_transaction'        => $options['purpose_transaction'],
+            'reference_label'            => $options['reference_label'],
+            'qr_size'                    => $options['qr_size'],
+            'qr_color'                   => $options['qr_color'],
+            'merchant_name'              => $merchant_name,
+            'merchant_city'              => $merchant_city,
+        );
+
+        // Check if this exact setting combination is already the last log
+        $last_log = $this->get_last_log();
+        $should_log = false;
+
+        if (!$last_log) {
+            $should_log = true; // No logs exist yet
+        } else {
+            $last_settings = json_decode($last_log['settings'], true);
+            if (!$this->settings_equal($last_settings, $log_settings)) {
+                $should_log = true; // Settings are different from last log
+            }
+        }
+
+        if ($should_log) {
+            $this->add_qr_log($qr_base64, $log_settings);
+            $logged = true;
+        }
+    }
+
+    wp_send_json(array(
+        'success'       => $result['success'],
+        'qr_data'       => $qr_base64,
+        'merchant_name' => $merchant_name,
+        'merchant_city' => $merchant_city,
+        'error'         => $result['error'],
+        'debug'         => $result['debug'],
+        'logged'        => $logged,
+    ));
+}
 
     public function ajax_generate_qr() {
         check_ajax_referer('zwennpay_qr_frontend_nonce', 'nonce');
@@ -647,14 +789,22 @@ public function ajax_delete_qr_logs() {
                '&color=' . $color . '&data=' . urlencode($data) . '&margin=10';
     }
 
-    public function generate_qr_base64($text, $size = 256) {
-        ob_start();
-        \QRcode::png($text, null, QR_ECLEVEL_L, $size / 25);
-        $imageData = ob_get_contents();
-        ob_end_clean();
+public function generate_qr_base64($text, $size = 256) {
+    $temp_dir = sys_get_temp_dir();
+    $temp_file = tempnam($temp_dir, 'zwqr_');
 
-        return 'data:image/png;base64,' . base64_encode($imageData);
+    // Second parameter = file path → QRcode writes to file instead of output
+    \QRcode::png($text, $temp_file, QR_ECLEVEL_L, $size / 25);
+
+    $image_data = file_get_contents($temp_file);
+    unlink($temp_file);
+
+    if (empty($image_data)) {
+        return '';
     }
+
+    return 'data:image/png;base64,' . base64_encode($image_data);
+}
 
     public function render_shortcode($atts) {
         $atts = shortcode_atts(array(
