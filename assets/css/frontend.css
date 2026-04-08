@@ -1,0 +1,112 @@
+/**
+ * ZwennPay QR Frontend Styles
+ */
+
+.zwennpay-qr-container {
+    display: inline-block;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+.zwennpay-qr-form {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    max-width: 400px;
+}
+
+.zwennpay-form-group {
+    margin-bottom: 15px;
+}
+
+.zwennpay-form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #333;
+}
+
+.zwennpay-form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.zwennpay-form-group input:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.2);
+}
+
+.zwennpay-generate-btn {
+    display: inline-block;
+    background: #0073aa;
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    width: 100%;
+}
+
+.zwennpay-generate-btn:hover {
+    background: #005177;
+}
+
+.zwennpay-generate-btn:disabled {
+    background: #99c7dd;
+    cursor: not-allowed;
+}
+
+.zwennpay-qr-display {
+    padding: 15px;
+}
+
+.zwennpay-qr-image {
+    display: inline-block;
+    padding: 15px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.zwennpay-qr-image img,
+.zwennpay-qr-image canvas {
+    display: block !important;
+}
+
+.zwennpay-qr-amount {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #333;
+    margin-top: 10px;
+    padding: 5px 15px;
+}
+
+.zwennpay-error {
+    color: #dc3232;
+    padding: 10px;
+    background: #fef7f1;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+/* Centered variant */
+.zwennpay-qr-container.center {
+    display: block;
+    text-align: center;
+}
+
+.zwennpay-qr-container.center .zwennpay-qr-form {
+    margin-left: auto;
+    margin-right: auto;
+}

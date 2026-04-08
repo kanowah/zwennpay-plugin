@@ -1,0 +1,170 @@
+/**
+ * ZwennPay QR Admin Styles
+ */
+
+.zwennpay-settings-wrap {
+    max-width: 1200px;
+}
+
+.zwennpay-settings-layout {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.zwennpay-settings-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.zwennpay-settings-sidebar {
+    width: 350px;
+    flex-shrink: 0;
+}
+
+.zwennpay-settings-main .form-table th {
+    width: 220px;
+    padding: 20px 10px 20px 0;
+    font-weight: 600;
+}
+
+.zwennpay-settings-main .form-table td {
+    padding: 15px 10px;
+}
+
+.zwennpay-settings-main .form-table input[type="color"] {
+    width: 60px;
+    height: 40px;
+    padding: 2px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.zwennpay-settings-sidebar .zwennpay-preview-box,
+.zwennpay-settings-sidebar .zwennpay-test-box,
+.zwennpay-settings-sidebar .zwennpay-debug-box,
+.zwennpay-settings-sidebar .zwennpay-usage-box {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.zwennpay-settings-sidebar h3 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+#zwennpay-preview-container {
+    text-align: center;
+    padding: 20px 0;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#zwennpay-preview-qr {
+    display: inline-block;
+}
+
+#zwennpay-preview-qr img,
+#zwennpay-preview-qr canvas {
+    display: block !important;
+    margin: 0 auto;
+}
+
+.zwennpay-preview-placeholder {
+    color: #666;
+    font-style: italic;
+}
+
+#zwennpay-preview-amount {
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-top: 10px;
+    color: #0073aa;
+}
+
+#zwennpay-test-result {
+    margin-top: 15px;
+}
+
+#zwennpay-test-result .notice {
+    margin: 0;
+    padding: 8px 12px;
+}
+
+.zwennpay-usage-box code {
+    display: block;
+    background: #f0f0f1;
+    padding: 8px 12px;
+    margin: 5px 0 15px;
+    border-radius: 4px;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.zwennpay-usage-box p {
+    margin: 10px 0 5px;
+}
+
+/* Debug Box Styles */
+.zwennpay-debug-box details summary {
+    cursor: pointer;
+    font-weight: bold;
+    padding: 5px 0;
+}
+
+.zwennpay-debug-box pre {
+    font-size: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #1d1d1d;
+    color: #00ff00;
+    padding: 15px;
+    border-radius: 4px;
+    max-height: 400px;
+    overflow: auto;
+    margin: 0;
+}
+
+/* Test Box Button Styles */
+.zwennpay-test-box .button {
+    margin-bottom: 10px;
+}
+
+.zwennpay-test-box p {
+    margin: 10px 0 5px;
+    font-size: 13px;
+}
+.maucas-logo {
+    background: url(../maucas-logo.svg);
+    height: 65px;
+    width: 500px;
+    background-position: center;
+    background-size: cover;
+}
+
+.Zvenn-Pay-logo {
+    background: url(../Zvenn-Pay-logo.svg);
+    height: 20px;
+    width: 100px;
+    background-position: center;
+    background-size: cover;
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+    .zwennpay-settings-layout {
+        flex-direction: column;
+    }
+    
+    .zwennpay-settings-sidebar {
+        width: 100%;
+    }
+}
