@@ -10,6 +10,7 @@
     display: flex;
     gap: 30px;
     margin-top: 20px;
+    flex-wrap: wrap;
 }
 
 .zwennpay-settings-main {
@@ -159,6 +160,347 @@
 }
 .zwennpay-preview-box img {
     width: 70%;
+}
+
+/**
+ * ZwennPay QR Admin Styles v1.0.0
+ */
+
+/* QR History Log Section */
+.zwennpay-history-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.zwennpay-history-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #ccd0d4;
+    background: #f9fafb;
+    border-radius: 4px 4px 0 0;
+}
+
+.zwennpay-logs-card {
+    padding: 0;
+}
+
+/* Log Table Styles */
+.zwennpay-logs-table {
+    border: none !important;
+    margin: 0;
+}
+
+.zwennpay-logs-table thead th {
+    background: #f6f7f7;
+    border-bottom: 1px solid #ccd0d4;
+    padding: 12px 15px;
+    font-weight: 600;
+    color: #1d2327;
+    font-size: 13px;
+}
+
+.zwennpay-logs-table tbody td {
+    padding: 15px;
+    vertical-align: top;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.zwennpay-logs-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.zwennpay-logs-table tbody tr:hover {
+    background: #f6f7f7;
+}
+
+/* Date/Time Column */
+.zwennpay-log-date {
+    font-size: 14px;
+    color: #1d2327;
+    display: block;
+}
+
+.zwennpay-log-time {
+    font-size: 12px;
+    color: #646970;
+    display: block;
+    margin-top: 4px;
+}
+
+/* QR Code Column */
+.zwennpay-log-qr-col {
+    text-align: center;
+}
+
+.zwennpay-log-qr-img {
+    width: 80px;
+    height: 80px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zwennpay-log-qr-img:hover {
+    transform: scale(1.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 100;
+    position: relative;
+}
+
+/* Settings Column */
+.zwennpay-log-settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.zwennpay-setting-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: #f0f0f1;
+    color: #50575e;
+    border: 1px solid #dcdcde;
+    transition: background 0.2s ease;
+}
+
+.zwennpay-setting-tag:hover {
+    background: #e5e5e6;
+}
+
+.zwennpay-setting-tag .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+/* Tag Variants */
+.tag-amount {
+    background: #e7f5fe;
+    color: #0073aa;
+    border-color: #99c7e2;
+}
+
+.tag-amount:hover {
+    background: #cce9f9;
+}
+
+.tag-tip {
+    background: #fef0f0;
+    color: #d63638;
+    border-color: #f0b8b8;
+}
+
+.tag-tip:hover {
+    background: #fde2e2;
+}
+
+.tag-fee {
+    background: #fef7e7;
+    color: #c08400;
+    border-color: #f0d68a;
+}
+
+.tag-fee:hover {
+    background: #fdf0d5;
+}
+
+.tag-store {
+    background: #e7f5e7;
+    color: #006500;
+    border-color: #8fc88f;
+}
+
+.tag-store:hover {
+    background: #d4ecd4;
+}
+
+.tag-info {
+    background: #f0f0f1;
+    color: #50575e;
+    border-color: #dcdcde;
+}
+
+.tag-purpose {
+    background: #f3e7fd;
+    color: #7e3ca8;
+    border-color: #d1a3e8;
+}
+
+.tag-purpose:hover {
+    background: #e8d4f8;
+}
+
+.tag-customer {
+    background: #e7f0f5;
+    color: #1d5a80;
+    border-color: #9ec3db;
+}
+
+.tag-terminal {
+    background: #f0f0f1;
+    color: #50575e;
+    border-color: #dcdcde;
+}
+
+.tag-color {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zwennpay-color-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #ccc;
+}
+
+/* Merchant Details */
+.zwennpay-merchant-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #dcdcde;
+    width: 100%;
+}
+
+.zwennpay-merchant-name {
+    font-weight: 600;
+    font-size: 12px;
+    color: #1d2327;
+}
+
+.zwennpay-merchant-city {
+    font-size: 11px;
+    color: #646970;
+}
+
+/* No Logs State */
+.zwennpay-no-logs {
+    text-align: center;
+    padding: 40px 20px !important;
+    color: #646970;
+}
+
+.zwennpay-no-logs .dashicons {
+    margin-bottom: 10px;
+}
+
+/* Pagination Styles */
+#zwennpay-logs-pagination {
+    padding: 10px 15px;
+    background: #f6f7f7;
+    border-top: 1px solid #ccd0d4;
+    border-radius: 0 0 4px 4px;
+    margin: 0;
+}
+#zwennpay-logs-pagination .tablenav-pages {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#zwennpay-logs-pagination .displaying-num {
+    font-size: 13px;
+    color: #646970;
+}
+
+#zwennpay-logs-pagination .pagination-links {
+    display: flex;
+    gap: 4px;
+}
+
+#zwennpay-logs-pagination .page-numbers {
+    min-width: 30px;
+    height: 30px;
+    line-height: 28px;
+    padding: 0 8px;
+    text-align: center;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#zwennpay-logs-pagination .page-numbers.current {
+    background: #2271b1;
+    color: #fff;
+    border-color: #2271b1;
+    cursor: default;
+}
+
+#zwennpay-logs-pagination .page-numbers:hover:not(.current) {
+    background: #f6f7f7;
+    border-color: #2271b1;
+    color: #2271b1;
+}
+
+/* Clear Logs Button */
+#zwennpay-clear-logs {
+    font-size: 12px;
+    text-decoration: none;
+}
+
+#zwennpay-clear-logs:hover {
+    color: #d63638;
+}
+
+#zwennpay-clear-logs:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .zwennpay-logs-table thead {
+        display: none;
+    }
+
+    .zwennpay-logs-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 15px;
+        border-bottom: 1px solid #f0f0f1;
+    }
+
+    .zwennpay-logs-table tbody td {
+        border: none;
+        padding: 0;
+    }
+
+    .zwennpay-log-date-col {
+        width: 100%;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #f0f0f1;
+    }
+
+    .zwennpay-log-qr-col {
+        width: 100px;
+        padding-right: 15px;
+    }
+
+    .zwennpay-log-settings-col {
+        flex: 1;
+    }
+
+    .zwennpay-log-qr-img {
+        width: 70px;
+        height: 70px;
+    }
 }
 /* Responsive */
 @media (max-width: 960px) {
