@@ -30,12 +30,14 @@
             }
         });
 
-        // Auto-generate QR if merchant ID exists
-        var merchantIdField = document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]');
-        if (merchantIdField && merchantIdField.value) {
-            generateQR(false);
+        function generate_btn_txt() {
+            var merchantIdField = document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]');
+            if (merchantIdField && merchantIdField.value) {
+                $('#zwennpay-generate-preview').text('Generate New Preview');
+            }
         }
-
+        generate_btn_txt();
+        generateQR(false);
         // Generate preview button
         $('#zwennpay-generate-preview').on('click', function() {
             var $btn = $(this);
@@ -125,6 +127,7 @@
                         }
 
                         $('#zwennpay-generate-preview').prop('disabled', false).text('Generate Preview');
+                        generate_btn_txt();
 
                     } else {
                         $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');

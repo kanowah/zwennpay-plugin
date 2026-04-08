@@ -848,7 +848,7 @@ public function ajax_delete_qr_logs() {
                         <span class="dashicons dashicons-clock" style="vertical-align: middle; margin-right: 5px;"></span>
                         <?php esc_html_e('QR Code Generation History', 'zwennpay-qr'); ?>
                     </h2>
-                    <button type="button" id="zwennpay-clear-logs" class="button button-link-delete" title="<?php esc_attr_e('Delete all logs', 'zwennpay-qr'); ?>">
+                    <button type="button" id="zwennpay-clear-logs" class="button button-link-delete" title="<?php esc_attr_e('Delete all logs', 'zwennpay-qr'); ?>" style="display:none;">
                         <span class="dashicons dashicons-trash" style="vertical-align: middle;"></span>
                         <?php esc_html_e('Clear All', 'zwennpay-qr'); ?>
                     </button>
