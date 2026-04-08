@@ -5,6 +5,7 @@
     'use strict';
 
     var currentPage = 1;
+    var hasQRPreview = false; // Track if QR has been generated
 
     $(document).ready(function() {
 
@@ -38,12 +39,18 @@
         }
         generate_btn_txt();
         generateQR(false);
+        
         // Generate preview button
         $('#zwennpay-generate-preview').on('click', function() {
             var $btn = $(this);
             $btn.prop('disabled', true).text('Generating...');
             generateQR(true);
             jQuery('html, body').animate({ scrollTop: 0 }, 200);
+        });
+
+        // Download PDF button
+        $('#zwennpay-download-pdf').on('click', function() {
+            downloadPreviewPDF();
         });
 
         // Clear logs button
@@ -75,16 +82,121 @@
         // Load logs on page load
         loadLogs(1);
 
+        /**
+         * Download the preview box as PDF
+         */
+        function downloadPreviewPDF() {
+            var $downloadBtn = $('#zwennpay-download-pdf');
+            var $previewBox = $('#zwennpay-preview-box');
+            var $qrDiv = $('#zwennpay-preview-qr');
+
+            // Check if QR has been generated
+            if (!hasQRPreview || $qrDiv.is(':hidden') || $qrDiv.find('img').length === 0) {
+                alert(zwennpayAdmin.strings.no_preview);
+                return;
+            }
+
+            // Disable button and show loading state
+            var originalText = $downloadBtn.html();
+            $downloadBtn.prop('disabled', true).html(
+                '<span class="spinner is-active" style="float:none;vertical-align:middle;margin-top:-2px;"></span> ' +
+                zwennpayAdmin.strings.downloading
+            );
+
+html2canvas($previewBox[0], {
+    scale: 4,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    logging: false,
+    ignoreElements: function(element) {
+        if (element.classList && element.classList.contains('zwennpay-preview-buttons')) {
+            return true;
+        }
+        return false;
+    },
+    // Add these options to handle transforms better
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: $previewBox[0].scrollWidth,
+    windowHeight: $previewBox[0].scrollHeight,
+    width: $previewBox[0].scrollWidth,
+    height: $previewBox[0].scrollHeight,
+    onclone: function(clonedDoc) {
+        // Ensure cloned elements don't overflow
+        var clonedBox = clonedDoc.getElementById('zwennpay-preview-box');
+        if (clonedBox) {
+            clonedBox.style.overflow = 'visible';
+            clonedBox.style.transform = 'none';
+        }
+        
+        var clonedContainer = clonedDoc.getElementById('zwennpay-preview-container');
+        if (clonedContainer) {
+            clonedContainer.style.overflow = 'visible';
+        }
+    }
+}).then(function(canvas) {
+                // Create PDF
+                var jsPDF = window.jspdf.jsPDF;
+                
+                // Get canvas dimensions
+                var imgWidth = canvas.width;
+                var imgHeight = canvas.height;
+                
+                // Calculate PDF dimensions (A4 ratio or based on content)
+                var pdfWidth = 210; // A4 width in mm
+                var pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+                
+                // Ensure minimum height
+                pdfHeight = Math.max(pdfHeight, 100);
+                
+                // Create PDF with appropriate dimensions
+                var pdf = new jsPDF({
+                    orientation: pdfHeight > pdfWidth ? 'portrait' : 'portrait',
+                    unit: 'mm',
+                    format: [pdfWidth, pdfHeight]
+                });
+
+                // Add the image to PDF
+                var imgData = canvas.toDataURL('image/png');
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                // Generate filename with timestamp
+                var now = new Date();
+                var timestamp = now.getFullYear() + 
+                    String(now.getMonth() + 1).padStart(2, '0') + 
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') + 
+                    String(now.getMinutes()).padStart(2, '0');
+                
+                var filename = 'ZwennPay_QR_' + timestamp + '.pdf';
+
+                // Download the PDF
+                pdf.save(filename);
+
+                // Restore button
+                $downloadBtn.prop('disabled', false).html(originalText);
+
+            }).catch(function(error) {
+                console.error('PDF generation error:', error);
+                alert(zwennpayAdmin.strings.download_error);
+                $downloadBtn.prop('disabled', false).html(originalText);
+            });
+        }
+
 function generateQR(incrementCounter) {
     var $qrDiv = $('#zwennpay-preview-qr');
     var $text = $('#zwennpay-preview-text');
     var $amount = $('#zwennpay-preview-amount');
     var $logo = $('.Zvenn-Pay-logo');
+    var $downloadBtn = $('#zwennpay-download-pdf');
 
     $qrDiv.hide().empty();
     $amount.hide();
     $('.zwennpay-merchant-info').remove();
     $text.show().text('Reload QR code...');
+    hasQRPreview = false;
+    $downloadBtn.prop('disabled', true);
 
     $.ajax({
         url: zwennpayAdmin.ajaxUrl,
@@ -121,6 +233,10 @@ function generateQR(incrementCounter) {
                     $amount.text('Amount: ' + amount.toFixed(2)).show();
                 }
 
+                // Enable download button and set flag
+                hasQRPreview = true;
+                $downloadBtn.prop('disabled', false);
+
                 // Refresh the history log if a new unique entry was just saved
                 if (response.logged) {
                     loadLogs(1);
@@ -131,11 +247,15 @@ function generateQR(incrementCounter) {
             } else {
                 $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');
                 $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
+                hasQRPreview = false;
+                $downloadBtn.prop('disabled', true);
             }
         },
         error: function(xhr, status, error) {
             $text.html('<span style="color:red;">Error: ' + error + '</span>');
             $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
+            hasQRPreview = false;
+            $downloadBtn.prop('disabled', true);
         }
     });
 }

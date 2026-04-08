@@ -743,29 +743,36 @@ public function ajax_generate_qr_admin() {
         ));
     }
 
-    public function enqueue_admin_scripts($hook) {
-        if ($hook !== 'settings_page_zwennpay-qr-settings') return;
+public function enqueue_admin_scripts($hook) {
+    if ($hook !== 'settings_page_zwennpay-qr-settings') return;
 
-        wp_enqueue_script('zwennpay-qrcode-admin', plugins_url('assets/js/admin.js', __FILE__), array('jquery'), '1.0.0', true);
+    // Enqueue html2canvas and jsPDF for PDF download
+    wp_enqueue_script('html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', array(), '1.4.1', true);
+    wp_enqueue_script('jspdf', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', array(), '2.5.1', true);
+    
+    wp_enqueue_script('zwennpay-qrcode-admin', plugins_url('assets/js/admin.js', __FILE__), array('jquery', 'html2canvas', 'jspdf'), '1.0.0', true);
 
-        wp_localize_script('zwennpay-qrcode-admin', 'zwennpayAdmin', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('zwennpay_qr_nonce'),
-            'strings' => array(
-                'testing' => 'Testing...',
-                'generating' => 'Generating...',
-                'success' => 'Success!',
-                'error' => 'Error:',
-                'loading_logs' => 'Loading history...',
-                'no_logs' => 'No QR code generation history yet.',
-                'confirm_delete' => 'Are you sure you want to delete all QR code logs? This action cannot be undone.',
-                'logs_deleted' => 'All logs deleted successfully.',
-                'error_loading' => 'Error loading logs.',
-            ),
-        ));
+    wp_localize_script('zwennpay-qrcode-admin', 'zwennpayAdmin', array(
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('zwennpay_qr_nonce'),
+        'strings' => array(
+            'testing' => 'Testing...',
+            'generating' => 'Generating...',
+            'success' => 'Success!',
+            'error' => 'Error:',
+            'loading_logs' => 'Loading history...',
+            'no_logs' => 'No QR code generation history yet.',
+            'confirm_delete' => 'Are you sure you want to delete all QR code logs? This action cannot be undone.',
+            'logs_deleted' => 'All logs deleted successfully.',
+            'error_loading' => 'Error loading logs.',
+            'downloading' => 'Preparing PDF...',
+            'download_error' => 'Error generating PDF. Please try again.',
+            'no_preview' => 'Please generate a QR code preview first.',
+        ),
+    ));
 
-        wp_enqueue_style('zwennpay-qrcode-admin', plugins_url('assets/css/admin.css', __FILE__), array(), '1.0.0');
-    }
+    wp_enqueue_style('zwennpay-qrcode-admin', plugins_url('assets/css/admin.css', __FILE__), array(), '1.0.0');
+}
 
     public function enqueue_frontend_scripts() {
         wp_enqueue_script('zwennpay-qrcode-frontend', plugins_url('assets/js/frontend.js', __FILE__), array('jquery'), '1.0.0', true);
@@ -978,18 +985,25 @@ public function generate_qr_base64($text, $size = 256) {
                     </form>
                 </div>
 
-                <div class="zwennpay-settings-sidebar">
-                    <div class="zwennpay-preview-box">
-                        <div id="zwennpay-preview-container">
-                            <div class="maucas-logo"></div>
-                            <p id="zwennpay-preview-text">Click "Generate Preview" to see QR code</p>
-                            <div id="zwennpay-preview-qr" style="display: none;"></div>
-                            <div class="Zvenn-Pay-logo"></div>
-                            <p id="zwennpay-preview-amount" style="display: none;"></p>
-                        </div>
-                        <button type="button" id="zwennpay-generate-preview" class="button button-secondary" style="width:100%;">Generate Preview</button>
-                    </div>
-                </div>
+<div class="zwennpay-settings-sidebar">
+    <div class="zwennpay-preview-box" id="zwennpay-preview-box">
+        <div id="zwennpay-preview-container">
+            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/maucas-logo.svg'); ?>" alt="QR Code" style="display:block;margin:0 auto;transform: scale(7.2);height: 48px;width: auto;">
+            <p id="zwennpay-preview-text">Click "Generate Preview" to see QR code</p>
+            <div id="zwennpay-preview-qr" style="display: none;"></div>
+            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/Zvenn-Pay-logo.png'); ?>" alt="QR Code" style="display:block;height: 35px;width: auto;margin: -15px 0 -10px;">
+            <div class="Zvenn-Pay-logo"></div>
+            <p id="zwennpay-preview-amount" style="display: none;"></p>
+        </div>
+        <div class="zwennpay-preview-buttons">
+            <button type="button" id="zwennpay-generate-preview" class="button button-secondary" style="flex:1;">Generate Preview</button>
+            <button type="button" id="zwennpay-download-pdf" class="button button-primary" style="flex:1;" disabled>
+                <span class="dashicons dashicons-download" style="vertical-align: middle; margin-top: -2px;"></span>
+                Download PDF
+            </button>
+        </div>
+    </div>
+</div>
 
             <!-- QR Generation History Log Section -->
             <div class="zwennpay-history-section" style="margin-bottom: 20px;">

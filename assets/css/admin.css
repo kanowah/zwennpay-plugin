@@ -143,21 +143,6 @@
     margin: 10px 0 5px;
     font-size: 13px;
 }
-.maucas-logo {
-    background: url(../maucas-logo.svg);
-    height: 65px;
-    width: 500px;
-    background-position: center;
-    background-size: cover;
-}
-
-.Zvenn-Pay-logo {
-    background: url(../Zvenn-Pay-logo.svg);
-    height: 20px;
-    width: 100px;
-    background-position: center;
-    background-size: cover;
-}
 .zwennpay-preview-box img {
     width: 70%;
 }
@@ -462,7 +447,31 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+/* Preview Buttons Container */
+.zwennpay-preview-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 15px;
+}
 
+.zwennpay-preview-buttons .button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 8px 15px;
+    height: auto;
+}
+
+.zwennpay-preview-buttons .button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Ensure preview box has white background for clean PDF */
+#zwennpay-preview-box {
+    background-color: #ffffff !important;
+}
 /* Responsive */
 @media screen and (max-width: 782px) {
     .zwennpay-logs-table thead {
