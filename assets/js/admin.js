@@ -71,13 +71,8 @@
                         var amount = parseFloat($('input[name="zwennpay_qr_options[transaction_amount]"]').val()) || 0;
                         
                         var cleanColor = color.replace('#', '');
-                        var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + 
-                                   Math.min(size, 300) + 'x' + Math.min(size, 300) + 
-                                   '&color=' + cleanColor + 
-                                   '&data=' + encodeURIComponent(response.qr_data) +
-                                   '&margin=10';
-                        
-                        $qrDiv.html('<img src="' + qrUrl + '" alt="QR Code" style="display:block;margin:0 auto;">');
+                        // Use Base64 returned from PHP directly
+                        $qrDiv.html('<img src="' + response.qr_data + '" alt="QR Code" style="display:block;margin:0 auto;">');
                         
                         if (response.merchant_name || response.merchant_city) {
                             var infoHtml = '<div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">';

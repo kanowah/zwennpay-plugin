@@ -35,15 +35,9 @@
                     
                     if (response.success && response.data.qr_data) {
                         var cleanColor = color.replace('#', '');
-                        var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + 
-                                   size + 'x' + size + 
-                                   '&color=' + cleanColor + 
-                                   '&data=' + encodeURIComponent(response.data.qr_data) +
-                                   '&margin=10';
-                        
                         var html = '<div class="zwennpay-qr-image">' +
-                                   '<img src="' + qrUrl + '" alt="Payment QR Code" width="' + size + '" height="' + size + '">' +
-                                   '</div>';
+           '<img src="' + response.data.qr_data + '" alt="Payment QR Code" width="' + size + '" height="' + size + '">' +
+           '</div>';
                         
                         // Add extracted Merchant Info
                         if (response.data.merchant_name || response.data.merchant_city) {

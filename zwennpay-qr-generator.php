@@ -8,7 +8,7 @@
  * License: GPL v2 or later
  * Text Domain: zwennpay-qr
  */
-
+include_once plugin_dir_path(__FILE__) . '/includes/phpqrcode/qrlib.php';
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -400,41 +400,37 @@ public function ajax_generate_qr_admin() {
         $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
     }
 
-    wp_send_json(array(
-        'success' => $result['success'],
-        'qr_data' => $result['data'],
-        'merchant_name' => $merchant_name,
-        'merchant_city' => $merchant_city,
-        'error' => $result['error'],
-        'debug' => $result['debug'],
-        'new_preview_count' => $new_count, // ✅ return updated count only when incremented
-    ));
+$qr_base64 = $this->generate_qr_base64($result['data'], 256); // or $options['qr_size']
+wp_send_json(array(
+    'success' => $result['success'],
+    'qr_data' => $qr_base64,
+    'merchant_name' => $merchant_name,
+    'merchant_city' => $merchant_city,
+    'error' => $result['error'],
+    'debug' => $result['debug'],
+    'new_preview_count' => $new_count,
+));
 }
 
-    public function ajax_generate_qr() {
-        check_ajax_referer('zwennpay_qr_frontend_nonce', 'nonce');
+public function ajax_generate_qr() {
+    check_ajax_referer('zwennpay_qr_frontend_nonce', 'nonce');
 
-        $amount = isset($_POST['amount']) ? floatval($_POST['amount']) : 0;
-        $reference = isset($_POST['reference']) ? sanitize_text_field($_POST['reference']) : '';
+    $amount = isset($_POST['amount']) ? floatval($_POST['amount']) : 0;
+    $reference = isset($_POST['reference']) ? sanitize_text_field($_POST['reference']) : '';
 
-        $overrides = array();
-        if ($amount > 0) $overrides['transaction_amount'] = $amount;
-        if (!empty($reference)) $overrides['reference_label'] = $reference;
+    // Build the QR string locally
+    $qr_string = "MerchantId:" . get_option(self::OPTION_NAME)['merchant_id'] .
+                 ";Amount:" . $amount .
+                 ";Reference:" . $reference;
 
-        $result = $this->api_request($this->build_request_body($overrides));
+    $qr_base64 = $this->generate_qr_base64($qr_string, 256);
 
-        if ($result['success']) {
-            $parsed = $this->parse_emv_data($result['data']);
-            
-            wp_send_json_success(array(
-                'qr_data' => $result['data'],
-                'merchant_name' => isset($parsed['59']) ? $parsed['59'] : '',
-                'merchant_city' => isset($parsed['60']) ? $parsed['60'] : ''
-            ));
-        } else {
-            wp_send_json_error(array('message' => $result['error']));
-        }
-    }
+    wp_send_json_success(array(
+        'qr_data' => $qr_base64,
+        'merchant_name' => get_option(self::OPTION_NAME)['store_label'],
+        'merchant_city' => '' // optional if you have city info
+    ));
+}
 
     public function enqueue_admin_scripts($hook) {
         if ($hook !== 'settings_page_zwennpay-qr-settings') return;
@@ -475,6 +471,16 @@ public function ajax_generate_qr_admin() {
         $color = str_replace('#', '', $color);
         return 'https://api.qrserver.com/v1/create-qr-code/?size=' . $size . 'x' . $size . 
                '&color=' . $color . '&data=' . urlencode($data) . '&margin=10';
+    }
+
+    public function generate_qr_base64($text, $size = 256) {
+        // Use output buffering to capture the PNG output
+        ob_start();
+        \QRcode::png($text, null, QR_ECLEVEL_L, $size / 25); // size is in pixels, adjust scale
+        $imageData = ob_get_contents();
+        ob_end_clean();
+
+        return 'data:image/png;base64,' . base64_encode($imageData);
     }
 
     public function render_shortcode($atts) {
@@ -532,12 +538,12 @@ public function ajax_generate_qr_admin() {
             <div class="zwennpay-qr-display">
                 <?php if ($result['success'] && !empty($result['data'])): ?>
                     <div class="zwennpay-qr-image">
-                        <img src="<?php echo esc_url($this->generate_qr_image_url($result['data'], $size, $color)); ?>" 
-                             alt="Payment QR Code" width="<?php echo esc_attr($size); ?>" height="<?php echo esc_attr($size); ?>">
+                        <img src="<?php echo esc_url($this->generate_qr_base64($result['data'], $size)); ?>" 
+     alt="Payment QR Code" width="<?php echo esc_attr($size); ?>" height="<?php echo esc_attr($size); ?>">
                     </div>
                     
                     <?php if (!empty($merchant_name) || !empty($merchant_city)): ?>
-                        <div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">
+                        <div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 12px; line-height: 1.4;">
                             <?php if (!empty($merchant_name)): ?>
                                 <strong style="display:block;"><?php echo esc_html($merchant_name); ?></strong>
                             <?php endif; ?>

@@ -157,7 +157,9 @@
     background-position: center;
     background-size: cover;
 }
-
+.zwennpay-preview-box img {
+    width: 70%;
+}
 /* Responsive */
 @media (max-width: 960px) {
     .zwennpay-settings-layout {
