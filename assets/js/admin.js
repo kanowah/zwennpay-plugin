@@ -5,30 +5,49 @@
     'use strict';
 
     $(document).ready(function() {
+        $('input[data-limit]').on('input', function() {
+            var node = $(this);
+            var val = node.val().replace(/\D/g, '');
+            var limit = parseInt(node.data('limit'), 10);
+            
+            if (val.length > limit) {
+                val = val.substring(0, limit);
+            }
+            node.val(val);
+        });
 
-        // Auto-generate if merchant ID exists
-        /*if(document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]').value) {
-            generateQR();
-        }*/
+        // 2. Numeric Max Validation: Prevent entering value > max
+        $('input[data-max]').on('input', function() {
+            var node = $(this);
+            var max = parseFloat(node.data('max'));
+            var val = node.val();
+
+            if (val !== '' && parseFloat(val) > max) {
+                node.val(max);
+            }
+        });
+
+        var merchantIdField = document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]');
+        if(merchantIdField && merchantIdField.value) {
+            generateQR(false); 
+        }
         
-        // Generate Preview Button
         $('#zwennpay-generate-preview').on('click', function() {
             var $btn = $(this);
             $btn.prop('disabled', true).text('Generating...');
-            generateQR();
+            generateQR(true); 
             jQuery('html, body').animate({ scrollTop: 0 }, 200);
         });
 
-        function generateQR(){
+        function generateQR(incrementCounter){
             var $qrDiv = $('#zwennpay-preview-qr');
             var $text = $('#zwennpay-preview-text');
             var $amount = $('#zwennpay-preview-amount');
-            var $logo = $('.Zvenn-Pay-logo'); // The logo element
+            var $logo = $('.Zvenn-Pay-logo'); 
             
             $qrDiv.hide().empty();
             $amount.hide();
             
-            // Remove any previously added merchant info
             $('.zwennpay-merchant-info').remove();
             
             $text.show().text('Generating QR code...');
@@ -38,7 +57,8 @@
                 type: 'POST',
                 data: {
                     action: 'zwennpay_generate_qr_admin',
-                    nonce: zwennpayAdmin.nonce
+                    nonce: zwennpayAdmin.nonce,
+                    increment_counter: incrementCounter ? 'true' : 'false'
                 },
                 success: function(response) {
                     
@@ -57,7 +77,6 @@
                                    '&data=' + encodeURIComponent(response.qr_data) +
                                    '&margin=10';
                         
-                        // 1. Render the QR Image
                         $qrDiv.html('<img src="' + qrUrl + '" alt="QR Code" style="display:block;margin:0 auto;">');
                         
                         if (response.merchant_name || response.merchant_city) {
@@ -70,13 +89,26 @@
                             }
                             infoHtml += '</div>';
                             
-                            
                             $logo.after(infoHtml);
                         }
 
                         if (amount > 0 && $('input[name="zwennpay_qr_options[show_amount]"]').is(':checked')) {
                             $amount.text('Amount: ' + amount.toFixed(2)).show();
                         }
+
+                        if (incrementCounter && response.new_preview_count) {
+                            $('#zwennpay-counter').text(response.new_preview_count);
+                            // Ensure the notice is visible if it was hidden before
+                            $('#zwennpay-history-notice').show();
+                        }
+
+                        if (incrementCounter) {
+                            var countEl = $('#preview-count');
+                            var currentCount = parseInt(countEl.text()) || 0;
+                            countEl.text(currentCount + 1);
+                        }
+                        $('#zwennpay-generate-preview').prop('disabled', false).text('Generate Preview');
+
                     } else {
                         $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');
                     }

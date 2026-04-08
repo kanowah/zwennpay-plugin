@@ -1,5 +1,5 @@
 /**
- * ZwennPay QR Frontend JavaScript v1.0.0
+ * ZwennPay QR Frontend JavaScript v1.4.0
  */
 (function($) {
     'use strict';

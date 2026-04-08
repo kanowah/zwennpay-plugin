@@ -198,9 +198,6 @@ class ZwennPay_QR_Generator {
         return wp_parse_args(get_option(self::OPTION_NAME, array()), $defaults);
     }
 
-    /**
-     * Parse EMVCo QR string to extract specific IDs
-     */
     private function parse_emv_data($qr_string) {
         $data = array();
         $i = 0;
@@ -374,35 +371,45 @@ class ZwennPay_QR_Generator {
         wp_send_json(array('success' => $result['success'], 'data' => $result));
     }
 
-    public function ajax_generate_qr_admin() {
-        check_ajax_referer('zwennpay_qr_nonce', 'nonce');
-        if (!current_user_can('manage_options')) wp_send_json_error(array('message' => 'Unauthorized'));
-        
-        // Increment Preview Counter
-        $count = get_option(self::PREVIEW_COUNT_OPTION, 0);
-        update_option(self::PREVIEW_COUNT_OPTION, $count + 1);
-
-        $result = $this->api_request();
-        
-        $merchant_name = '';
-        $merchant_city = '';
-        
-        if ($result['success'] && !empty($result['data'])) {
-            $parsed = $this->parse_emv_data($result['data']);
-            $merchant_name = isset($parsed['59']) ? $parsed['59'] : '';
-            $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
-        }
-
-        wp_send_json(array(
-            'success' => $result['success'],
-            'qr_data' => $result['data'],
-            'merchant_name' => $merchant_name,
-            'merchant_city' => $merchant_city,
-            'error' => $result['error'],
-            'debug' => $result['debug'],
-            'preview_count' => $count + 1 // Send back new count if needed
-        ));
+public function ajax_generate_qr_admin() {
+    check_ajax_referer('zwennpay_qr_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Unauthorized'));
     }
+
+    // ✅ Check if increment is requested
+    $increment = isset($_POST['increment_counter']) && $_POST['increment_counter'] === 'true';
+
+    $new_count = null;
+
+    if ($increment) {
+        $count = get_option(self::PREVIEW_COUNT_OPTION, 0);
+        $count++;
+        update_option(self::PREVIEW_COUNT_OPTION, $count);
+        $new_count = $count;
+    }
+
+    $result = $this->api_request();
+
+    $merchant_name = '';
+    $merchant_city = '';
+
+    if ($result['success'] && !empty($result['data'])) {
+        $parsed = $this->parse_emv_data($result['data']);
+        $merchant_name = isset($parsed['59']) ? $parsed['59'] : '';
+        $merchant_city = isset($parsed['60']) ? $parsed['60'] : '';
+    }
+
+    wp_send_json(array(
+        'success' => $result['success'],
+        'qr_data' => $result['data'],
+        'merchant_name' => $merchant_name,
+        'merchant_city' => $merchant_city,
+        'error' => $result['error'],
+        'debug' => $result['debug'],
+        'new_preview_count' => $new_count, // ✅ return updated count only when incremented
+    ));
+}
 
     public function ajax_generate_qr() {
         check_ajax_referer('zwennpay_qr_frontend_nonce', 'nonce');
@@ -529,10 +536,7 @@ class ZwennPay_QR_Generator {
                              alt="Payment QR Code" width="<?php echo esc_attr($size); ?>" height="<?php echo esc_attr($size); ?>">
                     </div>
                     
-                    <?php 
-                    // Frontend: Display info below QR
-                    if (!empty($merchant_name) || !empty($merchant_city)): 
-                    ?>
+                    <?php if (!empty($merchant_name) || !empty($merchant_city)): ?>
                         <div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">
                             <?php if (!empty($merchant_name)): ?>
                                 <strong style="display:block;"><?php echo esc_html($merchant_name); ?></strong>
@@ -563,25 +567,25 @@ class ZwennPay_QR_Generator {
         $options = $this->get_options();
         $value = isset($options[$field_name]) ? $options[$field_name] : '';
         
-        // Determine attributes based on field name
         $type = 'text';
         $extra_attrs = '';
         
         switch ($field_name) {
             case 'merchant_id':
                 $type = 'number';
-                $extra_attrs = 'min="1" max="1000" required';
+                $extra_attrs = 'min="1" max="1000" required data-max="1000"';
                 break;
             case 'bill_number':
-                $type = 'number';
-                $extra_attrs = 'max="100000"';
+                $type = 'number'; // HTML number field
+                $extra_attrs = 'max="100000" data-max="100000"';
                 break;
             case 'mobile_no':
-                $extra_attrs = 'pattern="\d{8}" title="Please enter exactly 8 numbers" maxlength="8"';
+                // Use text to allow custom JS masking behavior
+                $extra_attrs = 'maxlength="8" pattern="[0-9]{8}" data-limit="8" inputmode="numeric"';
                 break;
             case 'loyalty_number':
                 $type = 'number';
-                $extra_attrs = 'max="10000"';
+                $extra_attrs = 'max="10000" data-max="10000"';
                 break;
         }
         
@@ -597,14 +601,14 @@ class ZwennPay_QR_Generator {
         
         switch ($field_name) {
             case 'transaction_amount':
-                $max = ' max="250000"';
+                $max = ' max="250000" data-max="250000"';
                 break;
             case 'convenience_tip':
             case 'convenience_fee_fixed':
-                $max = ' max="1000"';
+                $max = ' max="1000" data-max="1000"';
                 break;
             case 'convenience_fee_percentage':
-                $max = ' max="100"';
+                $max = ' max="100" data-max="100"';
                 break;
             case 'qr_size':
                 $min = '64';
@@ -639,7 +643,7 @@ class ZwennPay_QR_Generator {
             
             <?php if ($preview_count > 0): ?>
             <div class="notice notice-info inline" style="margin-top: 0; margin-bottom: 20px;">
-                <p><strong>History:</strong> You have generated a QR code preview <strong><?php echo esc_html($preview_count); ?></strong> times.</p>
+                <p><strong>History:</strong> You have generated a QR code preview <strong id="preview-count"><?php echo esc_html($preview_count); ?></strong> times.</p>
             </div>
             <?php endif; ?>
             
@@ -661,7 +665,6 @@ class ZwennPay_QR_Generator {
                             <p id="zwennpay-preview-text">Click "Generate Preview" to see QR code</p>
                             <div id="zwennpay-preview-qr" style="display: none;"></div>
                             <div class="Zvenn-Pay-logo"></div>
-                            <!-- Merchant info will be inserted here by JS -->
                             <p id="zwennpay-preview-amount" style="display: none;"></p>
                         </div>
                         <button type="button" id="zwennpay-generate-preview" class="button button-secondary" style="width:100%;">Generate Preview</button>
