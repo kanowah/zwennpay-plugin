@@ -1,526 +1,461 @@
 /**
- * ZwennPay QR Admin JavaScript v1.0.0
+ * ZwennPay QR Admin JavaScript v1.1.0
  */
 (function($) {
     'use strict';
 
-    var currentPage = 1;
-    var hasQRPreview = false; // Track if QR has been generated
+    var currentPage  = 1;
+    var hasQRPreview = false;
 
     $(document).ready(function() {
 
-        // Input validation handlers
-        $('input[data-limit]').on('input', function() {
-            var node = $(this);
-            var val = node.val().replace(/\D/g, '');
-            var limit = parseInt(node.data('limit'), 10);
+        // ----------------------------------------------------------------
+        // Advanced options toggle
+        // ----------------------------------------------------------------
+        $('#zwennpay-advanced-toggle').on('click', function() {
+            var $section = $('#zwennpay-advanced-section');
+            var $icon    = $(this).find('.dashicons');
+            var isOpen   = $section.is(':visible');
 
-            if (val.length > limit) {
-                val = val.substring(0, limit);
-            }
+            $section.slideToggle(200);
+            $icon.toggleClass('dashicons-arrow-down-alt2', isOpen)
+                 .toggleClass('dashicons-arrow-up-alt2', !isOpen);
+        });
+
+        // ----------------------------------------------------------------
+        // Input validation
+        // ----------------------------------------------------------------
+        $('input[data-limit]').on('input', function() {
+            var node  = $(this);
+            var val   = node.val().replace(/\D/g, '');
+            var limit = parseInt(node.data('limit'), 10);
+            if (val.length > limit) val = val.substring(0, limit);
             node.val(val);
         });
 
         $('input[data-max]').on('input', function() {
             var node = $(this);
-            var max = parseFloat(node.data('max'));
-            var val = node.val();
-
-            if (val !== '' && parseFloat(val) > max) {
-                node.val(max);
-            }
+            var max  = parseFloat(node.data('max'));
+            var val  = node.val();
+            if (val !== '' && parseFloat(val) > max) node.val(max);
         });
 
-        function generate_btn_txt() {
-            var merchantIdField = document.querySelector('input[name="zwennpay_qr_options[merchant_id]"]');
-            if (merchantIdField && merchantIdField.value) {
-                $('#zwennpay-generate-preview').text('Reload');
-            }
+        // ----------------------------------------------------------------
+        // "Generate QR Code" button (form submit) → intercept & call AJAX
+        // We hook the form submit so settings are saved first, then QR generated.
+        // ----------------------------------------------------------------
+        $('#zwennpay-settings-form').on('submit', function(e) {
+            // Let the form submit normally (saves settings),
+            // but also queue a QR generation after the page reloads.
+            // We store a flag in sessionStorage to trigger generation after reload.
+            sessionStorage.setItem('zwennpay_generate_on_load', '1');
+        });
+
+        // Check if we should auto-generate after a settings save
+        if (sessionStorage.getItem('zwennpay_generate_on_load') === '1') {
+            sessionStorage.removeItem('zwennpay_generate_on_load');
+            generateQR(true);
+        } else {
+            // Auto-load preview on page open (preview only, no save)
+            generateQR(false);
         }
-        generate_btn_txt();
-        generateQR(false);
-        
-        // Generate preview button
+
+        // ----------------------------------------------------------------
+        // "Preview Only" sidebar button
+        // ----------------------------------------------------------------
         $('#zwennpay-generate-preview').on('click', function() {
             var $btn = $(this);
-            $btn.prop('disabled', true).text('Generating...');
-            generateQR(true);
-            jQuery('html, body').animate({ scrollTop: 0 }, 200);
+            $btn.prop('disabled', true).text(zwennpayAdmin.strings.generating);
+            generateQR(false);
+            $('html, body').animate({ scrollTop: 0 }, 200);
         });
 
-        // Download PDF button
+        // ----------------------------------------------------------------
+        // Download PDF
+        // ----------------------------------------------------------------
         $('#zwennpay-download-pdf').on('click', function() {
             downloadPreviewPDF();
         });
 
-        // Clear logs button
-        $('#zwennpay-clear-logs').on('click', function() {
-            if (confirm(zwennpayAdmin.strings.confirm_delete)) {
-                var $btn = $(this);
-                $btn.prop('disabled', true);
+        // ----------------------------------------------------------------
+        // Clear all QR codes
+        // ----------------------------------------------------------------
+        $('#zwennpay-clear-qrs').on('click', function() {
+            if (!confirm(zwennpayAdmin.strings.confirm_delete_all)) return;
+            var $btn = $(this);
+            $btn.prop('disabled', true);
+            $.ajax({
+                url:  zwennpayAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'zwennpay_delete_generated_qrs', nonce: zwennpayAdmin.nonce },
+                success: function(response) {
+                    if (response.success) loadQRs(1);
+                    $btn.prop('disabled', false);
+                },
+                error: function() { $btn.prop('disabled', false); }
+            });
+        });
 
-                $.ajax({
-                    url: zwennpayAdmin.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'zwennpay_delete_qr_logs',
-                        nonce: zwennpayAdmin.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            loadLogs(1);
-                        }
-                        $btn.prop('disabled', false);
-                    },
-                    error: function() {
-                        $btn.prop('disabled', false);
-                    }
+        // ----------------------------------------------------------------
+        // Delete single QR (delegated)
+        // ----------------------------------------------------------------
+        $(document).on('click', '.zwennpay-delete-single', function() {
+            if (!confirm(zwennpayAdmin.strings.confirm_delete_one)) return;
+            var qr_id = $(this).data('id');
+            $.ajax({
+                url:  zwennpayAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'zwennpay_delete_single_qr', nonce: zwennpayAdmin.nonce, qr_id: qr_id },
+                success: function(response) {
+                    if (response.success) loadQRs(currentPage);
+                }
+            });
+        });
+
+        // ----------------------------------------------------------------
+        // Copy shortcode (delegated)
+        // ----------------------------------------------------------------
+        $(document).on('click', '.zwennpay-copy-shortcode', function() {
+            var sc   = $(this).data('shortcode');
+            var $btn = $(this);
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(sc).then(function() {
+                    $btn.text('Copied!');
+                    setTimeout(function() { $btn.text('Copy'); }, 2000);
                 });
+            } else {
+                // fallback
+                var $tmp = $('<input>').val(sc).appendTo('body').select();
+                document.execCommand('copy');
+                $tmp.remove();
+                $btn.text('Copied!');
+                setTimeout(function() { $btn.text('Copy'); }, 2000);
             }
         });
 
-        // Load logs on page load
-        loadLogs(1);
+        // Initial load of QR list
+        loadQRs(1);
 
-        /**
-         * Download the preview box as PDF
-         */
+        // ----------------------------------------------------------------
+        // generateQR
+        //   saveToDB = false → calls zwennpay_preview_qr_admin  (no DB write)
+        //   saveToDB = true  → calls zwennpay_generate_qr_admin (saves new row)
+        // ----------------------------------------------------------------
+        function generateQR(saveToDB) {
+            var action      = saveToDB ? 'zwennpay_generate_qr_admin' : 'zwennpay_preview_qr_admin';
+            var $qrDiv      = $('#zwennpay-preview-qr');
+            var $text       = $('#zwennpay-preview-text');
+            var $amount     = $('#zwennpay-preview-amount');
+            var $logo       = $('.Zvenn-Pay-logo');
+            var $downloadBtn= $('#zwennpay-download-pdf');
+
+            $qrDiv.hide().empty();
+            $amount.hide();
+            $('.zwennpay-merchant-info').remove();
+            $text.show().text('Generating...');
+            hasQRPreview = false;
+            $downloadBtn.prop('disabled', true);
+
+            $.ajax({
+                url:  zwennpayAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: action,
+                    nonce:  zwennpayAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success && response.qr_data) {
+                        $text.hide();
+                        $qrDiv.show();
+                        $qrDiv.html('<img src="' + response.qr_data + '" alt="QR Code" style="display:block;margin:0 auto;">');
+
+                        if (response.merchant_name || response.merchant_city) {
+                            var infoHtml = '<div class="zwennpay-merchant-info" style="text-align:center;margin-top:10px;font-family:sans-serif;font-size:10px;line-height:1.4;">';
+                            if (response.merchant_name) infoHtml += '<strong style="display:block;">' + escapeHtml(response.merchant_name) + '</strong>';
+                            if (response.merchant_city) infoHtml += '<span style="display:block;color:#666;">' + escapeHtml(response.merchant_city) + '</span>';
+                            infoHtml += '</div>';
+                            $logo.after(infoHtml);
+                        }
+
+                        var amount = parseFloat($('input[name="zwennpay_qr_options[transaction_amount]"]').val()) || 0;
+                        if (amount > 0 && $('input[name="zwennpay_qr_options[show_amount]"]').is(':checked')) {
+                            $amount.text('Amount: ' + amount.toFixed(2)).show();
+                        }
+
+                        hasQRPreview = true;
+                        $downloadBtn.prop('disabled', false);
+
+                        // Refresh list if a new QR was saved
+                        if (response.saved) {
+                            loadQRs(1);
+                        }
+
+                        $('#zwennpay-generate-preview').prop('disabled', false).text('Preview Only');
+
+                    } else {
+                        $text.html('<span style="color:red;">' + escapeHtml(response.error || 'No QR data received') + '</span>');
+                        $('#zwennpay-generate-preview').prop('disabled', false).text('Preview Only');
+                        hasQRPreview = false;
+                        $downloadBtn.prop('disabled', true);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $text.html('<span style="color:red;">Error: ' + escapeHtml(error) + '</span>');
+                    $('#zwennpay-generate-preview').prop('disabled', false).text('Preview Only');
+                    hasQRPreview = false;
+                    $downloadBtn.prop('disabled', true);
+                }
+            });
+        }
+
+        // ----------------------------------------------------------------
+        // loadQRs — fetches and renders the QR Generated table
+        // ----------------------------------------------------------------
+        function loadQRs(page) {
+            currentPage  = page;
+            var $body    = $('#zwennpay-qrs-body');
+            var $pagination = $('#zwennpay-qrs-pagination');
+
+            $body.html(
+                '<tr><td colspan="4" style="text-align:center;padding:30px;">' +
+                '<span class="spinner is-active" style="float:none;vertical-align:middle;"></span> ' +
+                zwennpayAdmin.strings.loading_qrs + '</td></tr>'
+            );
+
+            $.ajax({
+                url:  zwennpayAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'zwennpay_get_generated_qrs', nonce: zwennpayAdmin.nonce, page: page },
+                success: function(response) {
+                    if (!response.success) {
+                        $body.html('<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc3232;">' + zwennpayAdmin.strings.error_loading + '</td></tr>');
+                        return;
+                    }
+
+                    var data = response.data;
+
+                    // Toggle clear button
+                    if (data.total > 0) {
+                        $('#zwennpay-clear-qrs').hide();
+                    } else {
+                        $('#zwennpay-clear-qrs').hide();
+                    }
+
+                    if (data.rows.length === 0) {
+                        $body.html(
+                            '<tr><td colspan="4" class="zwennpay-no-logs">' +
+                            '<span class="dashicons dashicons-qr-code" style="font-size:40px;width:40px;height:40px;color:#ccc;"></span><br>' +
+                            zwennpayAdmin.strings.no_qrs + '</td></tr>'
+                        );
+                        $pagination.hide();
+                        return;
+                    }
+
+                    var html = '';
+                    $.each(data.rows, function(i, row) {
+                        var settings = {};
+                        try { settings = JSON.parse(row.settings); } catch(e) {}
+
+                        var date          = new Date(row.created_at.replace(/-/g, '/'));
+                        var formattedDate = formatDate(date);
+                        var formattedTime = formatTime(date);
+                        var amount        = parseFloat(row.amount) || 0;
+                        var purpose       = row.purpose || '';
+                        var label         = row.qr_label || '';
+                        var shortcode     = row.shortcode || '';
+
+                        html += '<tr class="zwennpay-log-row">';
+
+                        // Date
+                        html += '<td class="zwennpay-log-date-col">';
+                        html += '<strong class="zwennpay-log-date">' + formattedDate + '</strong><br>';
+                        html += '<span class="zwennpay-log-time">' + formattedTime + '</span>';
+                        html += '</td>';
+
+                        // QR image (thumbnail)
+                       /* html += '<td style="text-align:center;vertical-align:middle;">';
+                        if (row.qr_image) {
+                            html += '<img src="' + row.qr_image + '" alt="QR" style="width:60px;height:60px;display:block;margin:0 auto;">';
+                        }
+                        html += '</td>';*/
+
+                        // Details
+                        html += '<td class="zwennpay-log-settings-col">';
+                        html += '<div class="zwennpay-log-settings">';
+
+                        if (label) {
+                            html += '<span class="zwennpay-setting-tag tag-store"><span class="dashicons dashicons-store"></span> ' + escapeHtml(label) + '</span>';
+                        }
+                        if (amount > 0) {
+                            html += '<span class="zwennpay-setting-tag tag-amount"><span class="dashicons dashicons-money-alt"></span> ' + amount.toFixed(2) + '</span>';
+                        }
+                        if (purpose) {
+                            html += '<span class="zwennpay-setting-tag tag-purpose"><span class="dashicons dashicons-clipboard"></span> ' + escapeHtml(purpose) + '</span>';
+                        }
+                        if (settings.convenience_tip > 0) {
+                            html += '<span class="zwennpay-setting-tag tag-tip"><span class="dashicons dashicons-heart"></span> Tip: ' + parseFloat(settings.convenience_tip).toFixed(2) + '</span>';
+                        }
+                        if (settings.convenience_fee_fixed > 0) {
+                            html += '<span class="zwennpay-setting-tag tag-fee"><span class="dashicons dashicons-tag"></span> Fixed: ' + parseFloat(settings.convenience_fee_fixed).toFixed(2) + '</span>';
+                        }
+                        if (settings.convenience_fee_percentage > 0) {
+                            html += '<span class="zwennpay-setting-tag tag-fee"><span class="dashicons dashicons-percent"></span> Fee: ' + parseFloat(settings.convenience_fee_percentage).toFixed(2) + '%</span>';
+                        }
+                        if (settings.mobile_no) {
+                            html += '<span class="zwennpay-setting-tag tag-info"><span class="dashicons dashicons-phone"></span> ' + escapeHtml(settings.mobile_no) + '</span>';
+                        }
+                        /*if (settings.merchant_name) {
+                            html += '<div class="zwennpay-merchant-details">';
+                            html += '<span class="zwennpay-merchant-name">' + escapeHtml(settings.merchant_name) + '</span>';
+                            if (settings.merchant_city) html += ' <span class="zwennpay-merchant-city">' + escapeHtml(settings.merchant_city) + '</span>';
+                            html += '</div>';
+                        }*/
+
+                        html += '</div></td>';
+
+                        // Shortcode
+                        html += '<td style="vertical-align:middle;text-align: center;">';
+                        if (shortcode) {
+                            html += '<code style="font-size:11px;word-break:break-all;">' + escapeHtml(shortcode) + '</code><br>';
+                            html += '<button type="button" class="button button-small zwennpay-copy-shortcode" data-shortcode="' + escapeHtml(shortcode) + '" style="margin-top:4px;width:100%;">Copy</button>';
+                        }
+                        html += '</td>';
+
+                        // Delete
+                        html += '<td style="vertical-align:middle;text-align:center;">';
+                        html += '<button type="button" class="button button-small button-link-delete zwennpay-delete-single" data-id="' + row.id + '" title="Delete">';
+                        html += '<span class="dashicons dashicons-trash"></span>';
+                        html += '</button>';
+                        html += '</td>';
+
+                        html += '</tr>';
+                    });
+
+                    $body.html(html);
+
+                    // Pagination
+                    renderPagination($pagination, data);
+                },
+                error: function() {
+                    $body.html('<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc3232;">' + zwennpayAdmin.strings.error_loading + '</td></tr>');
+                }
+            });
+        }
+
+        function renderPagination($pagination, data) {
+            if (data.pages > 1) {
+                $pagination.show();
+                $('#zwennpay-qrs-count').text(data.total + ' item' + (data.total !== 1 ? 's' : ''));
+
+                var html      = '';
+                var startPage = Math.max(1, data.current_page - 2);
+                var endPage   = Math.min(data.pages, data.current_page + 2);
+
+                if (data.current_page > 1) {
+                    html += '<a class="button page-numbers" data-page="1">&laquo;</a> ';
+                    html += '<a class="button page-numbers" data-page="' + (data.current_page - 1) + '">&lsaquo;</a> ';
+                }
+                for (var i = startPage; i <= endPage; i++) {
+                    if (i === data.current_page) {
+                        html += '<span class="button page-numbers current">' + i + '</span> ';
+                    } else {
+                        html += '<a class="button page-numbers" data-page="' + i + '">' + i + '</a> ';
+                    }
+                }
+                if (data.current_page < data.pages) {
+                    html += '<a class="button page-numbers" data-page="' + (data.current_page + 1) + '">&rsaquo;</a> ';
+                    html += '<a class="button page-numbers" data-page="' + data.pages + '">&raquo;</a> ';
+                }
+
+                $('#zwennpay-qrs-links').html(html);
+
+                $('#zwennpay-qrs-links .page-numbers').on('click', function() {
+                    var pageNum = $(this).data('page');
+                    if (pageNum && !$(this).hasClass('current')) {
+                        loadQRs(pageNum);
+                        $('html, body').animate({ scrollTop: $('.zwennpay-history-section').offset().top - 32 }, 300);
+                    }
+                });
+            } else {
+                if (data.total > 0) {
+                    $pagination.show();
+                    $('#zwennpay-qrs-count').text(data.total + ' item' + (data.total !== 1 ? 's' : ''));
+                    $('#zwennpay-qrs-links').html('');
+                } else {
+                    $pagination.hide();
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // PDF download
+        // ----------------------------------------------------------------
         function downloadPreviewPDF() {
             var $downloadBtn = $('#zwennpay-download-pdf');
-            var $previewBox = $('#zwennpay-preview-box');
-            var $qrDiv = $('#zwennpay-preview-qr');
+            var $previewBox  = $('#zwennpay-preview-box');
+            var $qrDiv       = $('#zwennpay-preview-qr');
 
-            // Check if QR has been generated
             if (!hasQRPreview || $qrDiv.is(':hidden') || $qrDiv.find('img').length === 0) {
                 alert(zwennpayAdmin.strings.no_preview);
                 return;
             }
 
-            // Disable button and show loading state
             var originalText = $downloadBtn.html();
             $downloadBtn.prop('disabled', true).html(
                 '<span class="spinner is-active" style="float:none;vertical-align:middle;margin-top:-2px;"></span> ' +
                 zwennpayAdmin.strings.downloading
             );
 
-html2canvas($previewBox[0], {
-    scale: 4,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    logging: false,
-    ignoreElements: function(element) {
-        if (element.classList && element.classList.contains('zwennpay-preview-buttons')) {
-            return true;
-        }
-        return false;
-    },
-    // Add these options to handle transforms better
-    scrollX: 0,
-    scrollY: 0,
-    windowWidth: $previewBox[0].scrollWidth,
-    windowHeight: $previewBox[0].scrollHeight,
-    width: $previewBox[0].scrollWidth,
-    height: $previewBox[0].scrollHeight,
-    onclone: function(clonedDoc) {
-        // Ensure cloned elements don't overflow
-        var clonedBox = clonedDoc.getElementById('zwennpay-preview-box');
-        if (clonedBox) {
-            clonedBox.style.overflow = 'visible';
-            clonedBox.style.transform = 'none';
-        }
-        
-        var clonedContainer = clonedDoc.getElementById('zwennpay-preview-container');
-        if (clonedContainer) {
-            clonedContainer.style.overflow = 'visible';
-        }
-    }
-}).then(function(canvas) {
-                // Create PDF
-                var jsPDF = window.jspdf.jsPDF;
-                
-                // Get canvas dimensions
-                var imgWidth = canvas.width;
-                var imgHeight = canvas.height;
-                
-                // Calculate PDF dimensions (A4 ratio or based on content)
-                var pdfWidth = 210; // A4 width in mm
-                var pdfHeight = (imgHeight * pdfWidth) / imgWidth;
-                
-                // Ensure minimum height
-                pdfHeight = Math.max(pdfHeight, 100);
-                
-                // Create PDF with appropriate dimensions
-                var pdf = new jsPDF({
-                    orientation: pdfHeight > pdfWidth ? 'portrait' : 'portrait',
-                    unit: 'mm',
-                    format: [pdfWidth, pdfHeight]
-                });
+            html2canvas($previewBox[0], {
+                scale: 4, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false,
+                scrollX: 0, scrollY: 0,
+                ignoreElements: function(el) { return el.classList && el.classList.contains('zwennpay-preview-buttons'); },
+                onclone: function(clonedDoc) {
+                    var b = clonedDoc.getElementById('zwennpay-preview-box');
+                    if (b) { b.style.overflow = 'visible'; b.style.transform = 'none'; }
+                    var c = clonedDoc.getElementById('zwennpay-preview-container');
+                    if (c) c.style.overflow = 'visible';
+                }
+            }).then(function(canvas) {
+                var jsPDF    = window.jspdf.jsPDF;
+                var pdfWidth = 210;
+                var pdfHeight= Math.max((canvas.height * pdfWidth) / canvas.width, 100);
+                var pdf      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pdfWidth, pdfHeight] });
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
 
-                // Add the image to PDF
-                var imgData = canvas.toDataURL('image/png');
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-                // Generate filename with timestamp
                 var now = new Date();
-                var timestamp = now.getFullYear() + 
-                    String(now.getMonth() + 1).padStart(2, '0') + 
-                    String(now.getDate()).padStart(2, '0') + '_' +
-                    String(now.getHours()).padStart(2, '0') + 
-                    String(now.getMinutes()).padStart(2, '0');
-                
-                var filename = 'ZwennPay_QR_' + timestamp + '.pdf';
+                var ts  = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') +
+                          '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+                pdf.save('ZwennPay_QR_' + ts + '.pdf');
 
-                // Download the PDF
-                pdf.save(filename);
-
-                // Restore button
                 $downloadBtn.prop('disabled', false).html(originalText);
-
-            }).catch(function(error) {
-                console.error('PDF generation error:', error);
+            }).catch(function(err) {
+                console.error('PDF error:', err);
                 alert(zwennpayAdmin.strings.download_error);
                 $downloadBtn.prop('disabled', false).html(originalText);
             });
         }
 
-function generateQR(incrementCounter) {
-    var $qrDiv = $('#zwennpay-preview-qr');
-    var $text = $('#zwennpay-preview-text');
-    var $amount = $('#zwennpay-preview-amount');
-    var $logo = $('.Zvenn-Pay-logo');
-    var $downloadBtn = $('#zwennpay-download-pdf');
-
-    $qrDiv.hide().empty();
-    $amount.hide();
-    $('.zwennpay-merchant-info').remove();
-    $text.show().text('Reload QR code...');
-    hasQRPreview = false;
-    $downloadBtn.prop('disabled', true);
-
-    $.ajax({
-        url: zwennpayAdmin.ajaxUrl,
-        type: 'POST',
-        data: {
-            action: 'zwennpay_generate_qr_admin',
-            nonce: zwennpayAdmin.nonce,
-            increment_counter: incrementCounter ? 'true' : 'false'
-        },
-        success: function(response) {
-            if (response.success && response.qr_data) {
-                $text.hide();
-                $qrDiv.show();
-
-                var size = parseInt($('input[name="zwennpay_qr_options[qr_size]"]').val()) || 200;
-                var color = $('input[name="zwennpay_qr_options[qr_color]"]').val() || '#000000';
-                var amount = parseFloat($('input[name="zwennpay_qr_options[transaction_amount]"]').val()) || 0;
-
-                $qrDiv.html('<img src="' + response.qr_data + '" alt="QR Code" style="display:block;margin:0 auto;">');
-
-                if (response.merchant_name || response.merchant_city) {
-                    var infoHtml = '<div class="zwennpay-merchant-info" style="text-align:center; margin-top:10px; font-family: sans-serif; font-size: 10px; line-height: 1.4;">';
-                    if (response.merchant_name) {
-                        infoHtml += '<strong style="display:block;">' + response.merchant_name + '</strong>';
-                    }
-                    if (response.merchant_city) {
-                        infoHtml += '<span style="display:block; color: #666;">' + response.merchant_city + '</span>';
-                    }
-                    infoHtml += '</div>';
-                    $logo.after(infoHtml);
-                }
-
-                if (amount > 0 && $('input[name="zwennpay_qr_options[show_amount]"]').is(':checked')) {
-                    $amount.text('Amount: ' + amount.toFixed(2)).show();
-                }
-
-                // Enable download button and set flag
-                hasQRPreview = true;
-                $downloadBtn.prop('disabled', false);
-
-                // Refresh the history log if a new unique entry was just saved
-                if (response.logged) {
-                    loadLogs(1);
-                }
-
-                $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
-
-            } else {
-                $text.html('<span style="color:red;">' + (response.error || 'No QR data received') + '</span>');
-                $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
-                hasQRPreview = false;
-                $downloadBtn.prop('disabled', true);
-            }
-        },
-        error: function(xhr, status, error) {
-            $text.html('<span style="color:red;">Error: ' + error + '</span>');
-            $('#zwennpay-generate-preview').prop('disabled', false).text('Reload');
-            hasQRPreview = false;
-            $downloadBtn.prop('disabled', true);
-        }
-    });
-}
-
-        /**
-         * Load QR logs with pagination
-         */
-        function loadLogs(page) {
-            currentPage = page;
-            var $body = $('#zwennpay-logs-body');
-            var $pagination = $('#zwennpay-logs-pagination');
-
-            $body.html(
-                '<tr><td colspan="3" style="text-align: center; padding: 30px;">' +
-                '<span class="spinner is-active" style="float: none; vertical-align: middle;"></span> ' +
-                zwennpayAdmin.strings.loading_logs +
-                '</td></tr>'
-            );
-
-            $.ajax({
-                url: zwennpayAdmin.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'zwennpay_get_qr_logs',
-                    nonce: zwennpayAdmin.nonce,
-                    page: page
-                },
-                success: function(response) {
-                    if (response.success) {
-                        var data = response.data;
-
-                        if (data.logs.length === 0) {
-                            $body.html(
-                                '<tr><td colspan="3" class="zwennpay-no-logs">' +
-                                '<span class="dashicons dashicons-privacy" style="font-size: 40px; width: 40px; height: 40px; color: #ccc;"></span><br>' +
-                                zwennpayAdmin.strings.no_logs +
-                                '</td></tr>'
-                            );
-                            $pagination.hide();
-                            return;
-                        }
-
-                        var html = '';
-                        $.each(data.logs, function(index, log) {
-                            var settings = {};
-                            try {
-                                settings = JSON.parse(log.settings);
-                            } catch (e) {
-                                settings = {};
-                            }
-
-                            var date = new Date(log.created_at.replace(/-/g, '/')); // Fix for Safari
-                            var formattedDate = formatDate(date);
-                            var formattedTime = formatTime(date);
-
-                            html += '<tr class="zwennpay-log-row">';
-                            html += '<td class="zwennpay-log-date-col">';
-                            html += '<strong class="zwennpay-log-date">' + formattedDate + '</strong><br>';
-                            html += '<span class="zwennpay-log-time">' + formattedTime + '</span>';
-                            html += '</td>';
-                            html += '<td class="zwennpay-log-qr-col">';
-                            html += '<img src="' + log.qr_image + '" alt="QR Code" class="zwennpay-log-qr-img">';
-                            html += '</td>';
-                            html += '<td class="zwennpay-log-settings-col">';
-                            html += '<div class="zwennpay-log-settings">';
-
-                            if (settings.transaction_amount > 0) {
-                                html += '<span class="zwennpay-setting-tag tag-amount">' +
-                                    '<span class="dashicons dashicons-money-alt"></span> ' +
-                                    parseFloat(settings.transaction_amount).toFixed(2) +
-                                    '</span>';
-                            }
-                            if (settings.convenience_tip > 0) {
-                                html += '<span class="zwennpay-setting-tag tag-tip">' +
-                                    '<span class="dashicons dashicons-heart"></span> Tip: ' +
-                                    parseFloat(settings.convenience_tip).toFixed(2) +
-                                    '</span>';
-                            }
-                            if (settings.convenience_fee_fixed > 0) {
-                                html += '<span class="zwennpay-setting-tag tag-fee">' +
-                                    '<span class="dashicons dashicons-tag"></span> Fixed: ' +
-                                    parseFloat(settings.convenience_fee_fixed).toFixed(2) +
-                                    '</span>';
-                            }
-                            if (settings.convenience_fee_percentage > 0) {
-                                html += '<span class="zwennpay-setting-tag tag-fee">' +
-                                    '<span class="dashicons dashicons-percent"></span> Fee: ' +
-                                    parseFloat(settings.convenience_fee_percentage).toFixed(2) + '%' +
-                                    '</span>';
-                            }
-                            if (settings.bill_number) {
-                                html += '<span class="zwennpay-setting-tag tag-info">' +
-                                    '<span class="dashicons dashicons-list-view"></span> Bill: ' +
-                                    escapeHtml(settings.bill_number) +
-                                    '</span>';
-                            }
-                            if (settings.mobile_no) {
-                                html += '<span class="zwennpay-setting-tag tag-info">' +
-                                    '<span class="dashicons dashicons-phone"></span> ' +
-                                    escapeHtml(settings.mobile_no) +
-                                    '</span>';
-                            }
-                            if (settings.store_label) {
-                                html += '<span class="zwennpay-setting-tag tag-store">' +
-                                    '<span class="dashicons dashicons-store"></span> ' +
-                                    escapeHtml(settings.store_label) +
-                                    '</span>';
-                            }
-                            if (settings.loyalty_number) {
-                                html += '<span class="zwennpay-setting-tag tag-info">' +
-                                    '<span class="dashicons dashicons-star-filled"></span> Loyalty: ' +
-                                    escapeHtml(settings.loyalty_number) +
-                                    '</span>';
-                            }
-                            if (settings.purpose_transaction) {
-                                html += '<span class="zwennpay-setting-tag tag-purpose">' +
-                                    '<span class="dashicons dashicons-clipboard"></span> ' +
-                                    escapeHtml(settings.purpose_transaction) +
-                                    '</span>';
-                            }
-                            if (settings.customer_label) {
-                                html += '<span class="zwennpay-setting-tag tag-customer">' +
-                                    '<span class="dashicons dashicons-admin-users"></span> ' +
-                                    escapeHtml(settings.customer_label) +
-                                    '</span>';
-                            }
-                            if (settings.terminal_label) {
-                                html += '<span class="zwennpay-setting-tag tag-terminal">' +
-                                    '<span class="dashicons dashicons-desktop"></span> ' +
-                                    escapeHtml(settings.terminal_label) +
-                                    '</span>';
-                            }
-                            if (settings.qr_color && settings.qr_color !== '#000000') {
-                                html += '<span class="zwennpay-setting-tag tag-color">' +
-                                    '<span class="zwennpay-color-swatch" style="background-color: ' + settings.qr_color + ';"></span> ' +
-                                    settings.qr_color +
-                                    '</span>';
-                            }
-
-                            // Show merchant info if available
-                            if (settings.merchant_name) {
-                                html += '<div class="zwennpay-merchant-details">';
-                                html += '<span class="zwennpay-merchant-name">' + escapeHtml(settings.merchant_name) + '</span>';
-                                if (settings.merchant_city) {
-                                    html += '<span class="zwennpay-merchant-city">' + escapeHtml(settings.merchant_city) + '</span>';
-                                }
-                                html += '</div>';
-                            }
-
-                            html += '</div>';
-                            html += '</td>';
-                            html += '</tr>';
-                        });
-
-                        $body.html(html);
-
-                        // Pagination
-                        if (data.pages > 1) {
-                            $pagination.show();
-                            $('#zwennpay-logs-count').text(
-                                data.total + ' item' + (data.total !== 1 ? 's' : '')
-                            );
-
-                            var paginationHtml = '';
-                            var startPage = Math.max(1, data.current_page - 2);
-                            var endPage = Math.min(data.pages, data.current_page + 2);
-
-                            // First page & prev
-                            if (data.current_page > 1) {
-                                paginationHtml += '<a class="button page-numbers" data-page="1" title="First page">&laquo;</a> ';
-                                paginationHtml += '<a class="button page-numbers" data-page="' + (data.current_page - 1) + '" title="Previous page">&lsaquo;</a> ';
-                            }
-
-                            // Page numbers
-                            for (var i = startPage; i <= endPage; i++) {
-                                if (i === data.current_page) {
-                                    paginationHtml += '<span class="button page-numbers current">' + i + '</span> ';
-                                } else {
-                                    paginationHtml += '<a class="button page-numbers" data-page="' + i + '">' + i + '</a> ';
-                                }
-                            }
-
-                            // Next & last page
-                            if (data.current_page < data.pages) {
-                                paginationHtml += '<a class="button page-numbers" data-page="' + (data.current_page + 1) + '" title="Next page">&rsaquo;</a> ';
-                                paginationHtml += '<a class="button page-numbers" data-page="' + data.pages + '" title="Last page">&raquo;</a> ';
-                            }
-
-                            $('#zwennpay-logs-links').html(paginationHtml);
-
-                            // Pagination click handlers
-                            $('#zwennpay-logs-links .page-numbers').on('click', function() {
-                                var pageNum = $(this).data('page');
-                                if (pageNum && !$(this).hasClass('current')) {
-                                    loadLogs(pageNum);
-                                    // Smooth scroll to logs section
-                                    $('html, body').animate({
-                                        scrollTop: $('.zwennpay-history-section').offset().top - 32
-                                    }, 300);
-                                }
-                            });
-                        } else {
-                            // Show count even for single page
-                            if (data.total > 0) {
-                                $pagination.show();
-                                $('#zwennpay-logs-count').text(
-                                    data.total + ' item' + (data.total !== 1 ? 's' : '')
-                                );
-                                $('#zwennpay-logs-links').html('');
-                            } else {
-                                $pagination.hide();
-                            }
-                        }
-                    }
-                },
-                error: function() {
-                    $body.html(
-                        '<tr><td colspan="3" style="text-align: center; padding: 30px; color: #dc3232;">' +
-                        '<span class="dashicons dashicons-dismiss" style="font-size: 40px; width: 40px; height: 40px;"></span><br>' +
-                        zwennpayAdmin.strings.error_loading +
-                        '</td></tr>'
-                    );
-                }
-            });
-        }
-
-        /**
-         * Format date
-         */
+        // ----------------------------------------------------------------
+        // Helpers
+        // ----------------------------------------------------------------
         function formatDate(date) {
-            var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            var day = date.getDate();
-            var month = months[date.getMonth()];
-            var year = date.getFullYear();
-            return month + ' ' + day + ', ' + year;
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[date.getMonth()] + ' ' + date.getDate() + ', ' + date.getFullYear();
         }
 
-        /**
-         * Format time
-         */
         function formatTime(date) {
-            var hours = date.getHours();
-            var minutes = date.getMinutes();
-            var seconds = date.getSeconds();
-            var ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12;
-            hours = hours ? hours : 12;
-            minutes = minutes < 10 ? '0' + minutes : minutes;
-            seconds = seconds < 10 ? '0' + seconds : seconds;
-            return hours + ':' + minutes + ':' + seconds + ' ' + ampm;
+            var h = date.getHours(), m = date.getMinutes(), s = date.getSeconds();
+            var ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s + ' ' + ampm;
         }
 
-        /**
-         * Escape HTML to prevent XSS
-         */
         function escapeHtml(text) {
             if (!text) return '';
-            var map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+            return String(text).replace(/[&<>"']/g, function(m) {
+                return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[m];
+            });
         }
     });
 
