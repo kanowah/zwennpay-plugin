@@ -946,10 +946,10 @@ class ZwennPay_QR_Generator {
                 <div class="zwennpay-settings-sidebar">
                     <div class="zwennpay-preview-box" id="zwennpay-preview-box">
                         <div id="zwennpay-preview-container">
-                            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/maucas-logo.svg'); ?>" alt="QR Code" style="display:block;margin:0 auto;transform:scale(7.2);height:48px;width:auto;">
+                            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/maucas-logo.svg'); ?>" alt="QR Code" style="display:block;margin:0 auto 10px;transform:scale(7.2);height:48px;width:auto;">
                             <p id="zwennpay-preview-text">Click "Generate QR Code" to see QR</p>
                             <div id="zwennpay-preview-qr" style="display:none;"></div>
-                            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/Zvenn-Pay-logo.png'); ?>" alt="ZwennPay" style="display:block;height:35px;width:auto;margin:-15px 0 -10px;">
+                            <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/Zvenn-Pay-logo.png'); ?>" alt="ZwennPay" style="display:block;height:35px;width:auto;margin:-10px 0 -10px;">
                             <div class="Zvenn-Pay-logo"></div>
                             <p id="zwennpay-preview-amount" style="display:none;"></p>
                         </div>
