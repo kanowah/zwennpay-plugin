@@ -268,7 +268,7 @@
 
                         // Date
                         html += '<td class="zwennpay-log-date-col">';
-                        html += '<strong class="zwennpay-log-date">' + formattedDate + '</strong><br>';
+                        html += '<strong class="zwennpay-log-date">' + formattedDate + '</strong>';
                         html += '<span class="zwennpay-log-time">' + formattedTime + '</span>';
                         html += '</td>';
 
