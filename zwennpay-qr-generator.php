@@ -967,7 +967,7 @@ class ZwennPay_QR_Generator {
                 <div class="zwennpay-history-section" style="margin-bottom:20px;">
                     <div class="zwennpay-history-header" style="display:flex;justify-content:space-between;align-items:center;">
                         <h2 style="margin:0;font-size:1.3em;">
-                            <span class="dashicons dashicons-qr-code" style="vertical-align:middle;margin-right:5px;"></span>
+                            <span class="dashicons dashicons-qr-code" style="vertical-align:middle;margin-right:5px;display:none;"></span>
                             <?php esc_html_e('QR Generated', 'zwennpay-qr'); ?>
                         </h2>
                         <button type="button" id="zwennpay-clear-qrs" class="button button-link-delete" title="<?php esc_attr_e('Delete all generated QR codes', 'zwennpay-qr'); ?>" style="display:none;">
