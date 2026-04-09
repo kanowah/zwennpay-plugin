@@ -665,13 +665,13 @@ class ZwennPay_QR_Generator {
     }
 
     public function enqueue_frontend_scripts() {
-        wp_enqueue_script('zwennpay-qrcode-frontend', plugins_url('assets/js/frontend.js', __FILE__), array('jquery'), '1.0.0', true);
+        wp_enqueue_script('zwennpay-qrcode-frontend', plugins_url('assets/js/frontend.js', __FILE__), array('jquery'), '1.1.0', true);
         wp_localize_script('zwennpay-qrcode-frontend', 'zwennpayFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce'   => wp_create_nonce('zwennpay_qr_frontend_nonce'),
             'strings' => array('loading' => 'Loading...', 'error' => 'Error generating QR code.'),
         ));
-        wp_enqueue_style('zwennpay-qrcode-frontend', plugins_url('assets/css/frontend.css', __FILE__), array(), '1.0.0');
+        wp_enqueue_style('zwennpay-qrcode-frontend', plugins_url('assets/css/frontend.css', __FILE__), array(), '1.1.0');
     }
 
     // -------------------------------------------------------------------------
