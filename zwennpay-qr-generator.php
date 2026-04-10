@@ -860,46 +860,107 @@ function zwennpay_add_gateway_class($gateways) {
  * ZwennPay Activation Setup
  * ========================= */
 
-register_activation_hook(__FILE__, 'zwennpay_create_checkout_page');
+register_activation_hook(__FILE__, 'zwennpay_setup_wc_pages');
 
-function zwennpay_create_checkout_page() {
+function zwennpay_setup_wc_pages() {
+
     if (!class_exists('WooCommerce')) {
         deactivate_plugins(plugin_basename(__FILE__));
         wp_die('ZwennPay requires WooCommerce to be installed and activated.', 'Plugin dependency check', array('back_link' => true));
         return;
     }
 
-    // ── FIX: NEVER overwrite the WC checkout page if WooCommerce already has
-    // a valid published one. The previous code unconditionally overwrote
-    // woocommerce_checkout_page_id, which broke the block-based cart's
-    // "Proceed to Checkout" button (it would spin forever because WC Blocks
-    // couldn't resolve the checkout destination).
-    $existing_id = (int) get_option('woocommerce_checkout_page_id');
-    if ($existing_id > 0) {
-        $post = get_post($existing_id);
-        if ($post && $post->post_status === 'publish') {
-            flush_rewrite_rules();
-            return; // All good — WooCommerce already has a valid checkout page.
+    // ================================
+    // HANDLE CART PAGE
+    // ================================
+
+    $old_cart_id = (int) get_option('woocommerce_cart_page_id');
+    $replace_cart = true;
+
+    if ($old_cart_id > 0) {
+        $content = get_post_field('post_content', $old_cart_id);
+
+        // If already classic shortcode → keep it
+        if (strpos($content, '[woocommerce_cart]') !== false) {
+            $replace_cart = false;
         }
     }
 
-    // No valid WC checkout page exists — create one.
-    $existing_page = get_page_by_path('zwennpay-checkout');
-    if ($existing_page && $existing_page->post_status === 'publish') {
-        $page_id = $existing_page->ID;
-    } else {
-        $page_id = wp_insert_post(array(
-            'post_title'   => 'Checkout',
-            'post_name'    => 'zwennpay-checkout',
-            'post_content' => '[woocommerce_checkout]',
-            'post_status'  => 'publish',
-            'post_type'    => 'page',
-        ));
+    if ($replace_cart) {
+
+        $existing_cart = get_page_by_path('zwennpay-cart');
+
+        if ($existing_cart && $existing_cart->post_status === 'publish') {
+            $new_cart_id = $existing_cart->ID;
+        } else {
+            $new_cart_id = wp_insert_post(array(
+                'post_title'   => 'Cart',
+                'post_name'    => 'zwennpay-cart',
+                'post_content' => '[woocommerce_cart]',
+                'post_status'  => 'publish',
+                'post_type'    => 'page',
+            ));
+        }
+
+        if ($new_cart_id && !is_wp_error($new_cart_id)) {
+            update_option('woocommerce_cart_page_id', $new_cart_id);
+
+            if ($old_cart_id && get_post_status($old_cart_id) === 'publish') {
+                wp_update_post(array(
+                    'ID' => $old_cart_id,
+                    'post_status' => 'draft',
+                ));
+            }
+        }
     }
 
-    if ($page_id && !is_wp_error($page_id)) {
-        update_option('woocommerce_checkout_page_id', $page_id);
+    // ================================
+    // HANDLE CHECKOUT PAGE
+    // ================================
+
+    $old_checkout_id = (int) get_option('woocommerce_checkout_page_id');
+    $replace_checkout = true;
+
+    if ($old_checkout_id > 0) {
+        $content = get_post_field('post_content', $old_checkout_id);
+
+        // If already classic shortcode → keep it
+        if (strpos($content, '[woocommerce_checkout]') !== false) {
+            $replace_checkout = false;
+        }
     }
+
+    if ($replace_checkout) {
+
+        $existing_checkout = get_page_by_path('zwennpay-checkout');
+
+        if ($existing_checkout && $existing_checkout->post_status === 'publish') {
+            $new_checkout_id = $existing_checkout->ID;
+        } else {
+            $new_checkout_id = wp_insert_post(array(
+                'post_title'   => 'Checkout',
+                'post_name'    => 'zwennpay-checkout',
+                'post_content' => '[woocommerce_checkout]',
+                'post_status'  => 'publish',
+                'post_type'    => 'page',
+            ));
+        }
+
+        if ($new_checkout_id && !is_wp_error($new_checkout_id)) {
+            update_option('woocommerce_checkout_page_id', $new_checkout_id);
+
+            if ($old_checkout_id && get_post_status($old_checkout_id) === 'publish') {
+                wp_update_post(array(
+                    'ID' => $old_checkout_id,
+                    'post_status' => 'draft',
+                ));
+            }
+        }
+    }
+
+    // ================================
+    // FINAL
+    // ================================
 
     flush_rewrite_rules();
 }
