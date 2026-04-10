@@ -64,16 +64,16 @@
         showStatus('checking');
 
         var url = zwennpayWc.statusApiUrl +
-                  '?referenceLabel=' + encodeURIComponent(zwennpayWc.reference);
+                '?referenceLabel=' + encodeURIComponent(zwennpayWc.reference);
 
         $.ajax({
-            url: zwennpayWc.statusApiUrl,
+            url: url,
             type: 'POST',
-            contentType: 'application/json',
             dataType: 'json',
-            data: JSON.stringify({
-                referenceLabel: zwennpayWc.reference
-            }),
+            headers: {
+                'Accept': 'text/plain'
+            },
+            data: {},
             timeout: 10000,
             success: function(data) {
                 handleStatusResponse(data);
