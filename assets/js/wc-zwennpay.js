@@ -67,21 +67,24 @@
                   '?referenceLabel=' + encodeURIComponent(zwennpayWc.reference);
 
         $.ajax({
-            url:      url,
-            type:     'GET',
+            url: zwennpayWc.statusApiUrl,
+            type: 'POST',
+            contentType: 'application/json',
             dataType: 'json',
-            timeout:  10000,
+            data: JSON.stringify({
+                referenceLabel: zwennpayWc.reference
+            }),
+            timeout: 10000,
             success: function(data) {
                 handleStatusResponse(data);
             },
             error: function(xhr, status, error) {
-                // Network / CORS error — keep waiting, do not stop
-                console.warn('ZwennPay status API error:', status, error);
+                console.warn('ZwennPay status API error:', status, error, xhr.responseText);
                 showStatus('waiting');
             },
             complete: function() {
                 isChecking = false;
-            },
+            }
         });
     }
 

@@ -97,7 +97,10 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                 'title'       => __('Instructions', 'zwennpay-qr'),
                 'type'        => 'textarea',
                 'description' => __('Instructions shown on the payment page after order placement.', 'zwennpay-qr'),
-                'default'     => __("1. Open your mobile banking app\n2. Scan the QR code below\n3. Confirm the payment amount\n4. Wait for payment confirmation", 'zwennpay-qr'),
+                'default' => __("1. Open your mobile banking app
+2. Scan the QR code below
+3. Confirm the payment amount
+4. Wait for payment confirmation", 'zwennpay-qr'),
                 'desc_tip'    => true,
             ),
         );
@@ -310,7 +313,7 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                      class="zwennpay-wc-logo-bottom">
             </div>
 
-            <div class="zwennpay-wc-reference">
+            <div class="zwennpay-wc-reference" style="display:none;">
                 <?php printf(
                     esc_html__('Reference: %s', 'zwennpay-qr'),
                     '<strong>' . esc_html($reference) . '</strong>'
