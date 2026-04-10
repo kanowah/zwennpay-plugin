@@ -3,7 +3,7 @@
  * Plugin Name: ZwennPay QR Generator
  * Plugin URI: https://zwennpay.com/
  * Description: ZwennPay QR plugin for WordPress
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: ZwennPay
  * License: GPL v2 or later
  * Text Domain: zwennpay-qr
@@ -15,26 +15,26 @@ if (!defined('ABSPATH')) {
 
 class ZwennPay_QR_Generator {
 
-    const API_URL      = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQR';
-    const OPTION_NAME  = 'zwennpay_qr_options';
-    const QR_TABLE     = 'zwennpay_qr_generated';   // renamed from logs
-    const QRS_PER_PAGE = 10;
+    const API_URL         = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQR';
+    const OPTION_NAME     = 'zwennpay_qr_options';
+    const TX_TABLE        = 'zwennpay_transactions';  // Transaction history table
+    const TXS_PER_PAGE    = 10;
 
     public function __construct() {
-        add_action('admin_init',              array($this, 'ensure_qr_table_exists'), 1);
+        add_action('admin_init',              array($this, 'ensure_tx_table_exists'), 1);
         add_action('admin_menu',              array($this, 'add_admin_menu'));
         add_action('admin_init',              array($this, 'register_settings'));
         add_action('admin_enqueue_scripts',   array($this, 'enqueue_admin_scripts'));
         add_action('wp_enqueue_scripts',      array($this, 'enqueue_frontend_scripts'));
-        add_action('wp_ajax_zwennpay_test_connection',    array($this, 'ajax_test_connection'));
-        add_action('wp_ajax_zwennpay_test_original',      array($this, 'ajax_test_original'));
-        add_action('wp_ajax_zwennpay_generate_qr_admin',   array($this, 'ajax_generate_qr_admin'));
-        add_action('wp_ajax_zwennpay_preview_qr_admin',    array($this, 'ajax_preview_qr_admin'));
-        add_action('wp_ajax_zwennpay_generate_qr',        array($this, 'ajax_generate_qr'));
-        add_action('wp_ajax_nopriv_zwennpay_generate_qr', array($this, 'ajax_generate_qr'));
-        add_action('wp_ajax_zwennpay_get_generated_qrs',  array($this, 'ajax_get_generated_qrs'));
-        add_action('wp_ajax_zwennpay_delete_generated_qrs', array($this, 'ajax_delete_generated_qrs'));
-        add_action('wp_ajax_zwennpay_delete_single_qr',   array($this, 'ajax_delete_single_qr'));
+        add_action('wp_ajax_zwennpay_test_connection',       array($this, 'ajax_test_connection'));
+        add_action('wp_ajax_zwennpay_test_original',         array($this, 'ajax_test_original'));
+        add_action('wp_ajax_zwennpay_generate_qr_admin',     array($this, 'ajax_generate_qr_admin'));
+        add_action('wp_ajax_zwennpay_preview_qr_admin',      array($this, 'ajax_preview_qr_admin'));
+        add_action('wp_ajax_zwennpay_generate_qr',           array($this, 'ajax_generate_qr'));
+        add_action('wp_ajax_nopriv_zwennpay_generate_qr',    array($this, 'ajax_generate_qr'));
+        add_action('wp_ajax_zwennpay_get_transactions',      array($this, 'ajax_get_transactions'));
+        add_action('wp_ajax_zwennpay_delete_transactions',   array($this, 'ajax_delete_transactions'));
+        add_action('wp_ajax_zwennpay_delete_single_tx',      array($this, 'ajax_delete_single_tx'));
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_plugin_links'));
     }
 
@@ -43,34 +43,34 @@ class ZwennPay_QR_Generator {
     // -------------------------------------------------------------------------
 
     public static function activate() {
-        self::create_qr_table();
+        self::create_tx_table();
     }
 
-    public function ensure_qr_table_exists() {
+    public function ensure_tx_table_exists() {
         global $wpdb;
-        $table_name   = $wpdb->prefix . self::QR_TABLE;
+        $table_name   = $wpdb->prefix . self::TX_TABLE;
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'");
         if ($table_exists !== $table_name) {
-            self::create_qr_table();
+            self::create_tx_table();
         }
     }
 
-    private static function create_qr_table() {
+    private static function create_tx_table() {
         global $wpdb;
-        $table_name      = $wpdb->prefix . self::QR_TABLE;
+        $table_name      = $wpdb->prefix . self::TX_TABLE;
         $charset_collate = $wpdb->get_charset_collate();
 
         $sql = "CREATE TABLE $table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            qr_label varchar(255) NOT NULL DEFAULT '',
+            order_number varchar(100) NOT NULL DEFAULT '',
+            bill_number varchar(100) NOT NULL DEFAULT '',
+            reference_number varchar(255) NOT NULL DEFAULT '',
             amount decimal(12,2) NOT NULL DEFAULT 0,
-            purpose varchar(255) NOT NULL DEFAULT '',
-            shortcode longtext NOT NULL DEFAULT '',
-            qr_image longtext NOT NULL,
-            settings longtext NOT NULL,
+            status varchar(50) NOT NULL DEFAULT 'pending',
             PRIMARY KEY (id),
-            KEY created_at (created_at)
+            KEY created_at (created_at),
+            KEY status (status)
         ) $charset_collate;";
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -108,26 +108,12 @@ class ZwennPay_QR_Generator {
             array($this, 'sanitize_options')
         );
 
+        // Only Merchant ID and Store Label are exposed in settings now
         add_settings_section('zwennpay_qr_main_section', __('Main Settings', 'zwennpay-qr'), array($this, 'render_section_info'), 'zwennpay-qr-settings');
-        add_settings_field('merchant_id',        __('Merchant ID', 'zwennpay-qr'),                  array($this, 'render_text_field'),   'zwennpay-qr-settings', 'zwennpay_qr_main_section', 'merchant_id');
-        add_settings_field('transaction_amount', __('Transaction Amount', 'zwennpay-qr'),    array($this, 'render_number_field'), 'zwennpay-qr-settings', 'zwennpay_qr_main_section', 'transaction_amount');
-
-        add_settings_section('zwennpay_qr_fee_section', __('', 'zwennpay-qr'), array($this, 'render_section_info'), 'zwennpay-qr-settings');
-        add_settings_field('convenience_tip',            __('Convenience Tip', 'zwennpay-qr'),  array($this, 'render_number_field'), 'zwennpay-qr-settings', 'zwennpay_qr_fee_section', 'convenience_tip');
-        add_settings_field('convenience_fee_fixed',      __('Fixed Fee', 'zwennpay-qr'),        array($this, 'render_number_field'), 'zwennpay-qr-settings', 'zwennpay_qr_fee_section', 'convenience_fee_fixed');
-        add_settings_field('convenience_fee_percentage', __('Percentage Fee', 'zwennpay-qr'),   array($this, 'render_number_field'), 'zwennpay-qr-settings', 'zwennpay_qr_fee_section', 'convenience_fee_percentage');
-
-        add_settings_section('zwennpay_qr_additional_section', __('', 'zwennpay-qr'), array($this, 'render_additional_section_info'), 'zwennpay-qr-settings');
-        add_settings_field('bill_number',         __('Bill Number', 'zwennpay-qr'),          array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'bill_number');
-        add_settings_field('mobile_no',           __('Mobile Number', 'zwennpay-qr'),        array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'mobile_no');
-        add_settings_field('store_label',         __('Store Label', 'zwennpay-qr'),          array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'store_label');
-        add_settings_field('loyalty_number',      __('Loyalty Number', 'zwennpay-qr'),       array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'loyalty_number');
-        add_settings_field('customer_label',      __('Customer Label', 'zwennpay-qr'),       array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'customer_label');
-        add_settings_field('terminal_label',      __('Terminal Label', 'zwennpay-qr'),       array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'terminal_label');
-        add_settings_field('purpose_transaction', __('Purpose of Transaction', 'zwennpay-qr'), array($this, 'render_text_field'), 'zwennpay-qr-settings', 'zwennpay_qr_additional_section', 'purpose_transaction');
+        add_settings_field('merchant_id',  __('Merchant ID', 'zwennpay-qr'),   array($this, 'render_text_field'),   'zwennpay-qr-settings', 'zwennpay_qr_main_section', 'merchant_id');
+        add_settings_field('store_label',  __('Store Label', 'zwennpay-qr'),   array($this, 'render_text_field'),   'zwennpay-qr-settings', 'zwennpay_qr_main_section', 'store_label');
     }
 
-    public function render_additional_section_info() {}
     public function render_section_info() {}
 
     // -------------------------------------------------------------------------
@@ -146,71 +132,17 @@ class ZwennPay_QR_Generator {
             $new_input['merchant_id'] = isset($old_options['merchant_id']) ? $old_options['merchant_id'] : 0;
         }
 
-        $val = isset($input['transaction_amount']) ? $input['transaction_amount'] : 0;
-        if (is_numeric($val) && $val <= 250000) {
-            $new_input['transaction_amount'] = floatval($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'transaction_amount_error', 'Transaction Amount must be a number up to 250,000.', 'error');
-            $new_input['transaction_amount'] = isset($old_options['transaction_amount']) ? $old_options['transaction_amount'] : 0;
+        $new_input['store_label'] = sanitize_text_field($input['store_label'] ?? '');
+
+        // Preserve hidden/advanced options that may have been saved previously
+        $preserve = array('transaction_amount','convenience_tip','convenience_fee_fixed','convenience_fee_percentage',
+                          'bill_number','mobile_no','loyalty_number','customer_label','terminal_label',
+                          'purpose_transaction','reference_label','qr_size','qr_color','show_amount');
+        foreach ($preserve as $key) {
+            if (isset($old_options[$key])) {
+                $new_input[$key] = $old_options[$key];
+            }
         }
-
-        $val = isset($input['convenience_tip']) ? $input['convenience_tip'] : 0;
-        if (is_numeric($val) && $val <= 1000) {
-            $new_input['convenience_tip'] = floatval($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'convenience_tip_error', 'Convenience Tip must be a number up to 1000.', 'error');
-            $new_input['convenience_tip'] = isset($old_options['convenience_tip']) ? $old_options['convenience_tip'] : 0;
-        }
-
-        $val = isset($input['convenience_fee_fixed']) ? $input['convenience_fee_fixed'] : 0;
-        if (is_numeric($val) && $val <= 1000) {
-            $new_input['convenience_fee_fixed'] = floatval($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'fixed_fee_error', 'Fixed Fee must be a number up to 1000.', 'error');
-            $new_input['convenience_fee_fixed'] = isset($old_options['convenience_fee_fixed']) ? $old_options['convenience_fee_fixed'] : 0;
-        }
-
-        $val = isset($input['convenience_fee_percentage']) ? $input['convenience_fee_percentage'] : 0;
-        if (is_numeric($val) && $val <= 100) {
-            $new_input['convenience_fee_percentage'] = floatval($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'percentage_fee_error', 'Percentage Fee must be a number up to 100.', 'error');
-            $new_input['convenience_fee_percentage'] = isset($old_options['convenience_fee_percentage']) ? $old_options['convenience_fee_percentage'] : 0;
-        }
-
-        $val = isset($input['bill_number']) ? $input['bill_number'] : '';
-        if (empty($val) || (is_numeric($val) && $val <= 100000)) {
-            $new_input['bill_number'] = sanitize_text_field($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'bill_number_error', 'Bill Number must be a number up to 100000.', 'error');
-            $new_input['bill_number'] = isset($old_options['bill_number']) ? $old_options['bill_number'] : '';
-        }
-
-        $val = isset($input['mobile_no']) ? $input['mobile_no'] : '';
-        if (empty($val) || preg_match('/^\d{8}$/', $val)) {
-            $new_input['mobile_no'] = sanitize_text_field($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'mobile_no_error', 'Mobile Number must be exactly 8 numbers.', 'error');
-            $new_input['mobile_no'] = isset($old_options['mobile_no']) ? $old_options['mobile_no'] : '';
-        }
-
-        $new_input['store_label']         = sanitize_text_field($input['store_label']);
-        $new_input['purpose_transaction'] = sanitize_text_field($input['purpose_transaction']);
-
-        $val = isset($input['loyalty_number']) ? $input['loyalty_number'] : '';
-        if (empty($val) || (is_numeric($val) && $val <= 10000)) {
-            $new_input['loyalty_number'] = sanitize_text_field($val);
-        } else {
-            add_settings_error('zwennpay_qr_options_group', 'loyalty_number_error', 'Loyalty Number must be a number up to 10000.', 'error');
-            $new_input['loyalty_number'] = isset($old_options['loyalty_number']) ? $old_options['loyalty_number'] : '';
-        }
-
-        $new_input['reference_label'] = sanitize_text_field($input['reference_label'] ?? '');
-        $new_input['customer_label']  = sanitize_text_field($input['customer_label']);
-        $new_input['terminal_label']  = sanitize_text_field($input['terminal_label']);
-        $new_input['qr_size']         = absint($input['qr_size']);
-        $new_input['qr_color']        = sanitize_hex_color($input['qr_color']);
-        $new_input['show_amount']     = isset($input['show_amount']) ? 1 : 0;
 
         return $new_input;
     }
@@ -218,11 +150,11 @@ class ZwennPay_QR_Generator {
     public function get_options() {
         $defaults = array(
             'merchant_id'                => 0,
+            'store_label'                => '',
             'transaction_amount'         => 0,
             'reference_label'            => '',
             'bill_number'                => '',
             'mobile_no'                  => '',
-            'store_label'                => '',
             'loyalty_number'             => '',
             'customer_label'             => '',
             'terminal_label'             => '',
@@ -267,10 +199,12 @@ class ZwennPay_QR_Generator {
         $options = $this->get_options();
         $s       = wp_parse_args($overrides, $options);
 
+        // Store label: set to true only when not empty
+        $store   = isset($s['store_label']) ? $s['store_label'] : '';
+
         $ref     = isset($s['reference_label']) ? $s['reference_label'] : '';
         $bill    = isset($s['bill_number']) ? $s['bill_number'] : '';
         $mobile  = isset($s['mobile_no']) ? $s['mobile_no'] : '';
-        $store   = isset($s['store_label']) ? $s['store_label'] : '';
         $loyalty = isset($s['loyalty_number']) ? $s['loyalty_number'] : '';
         $customer= isset($s['customer_label']) ? $s['customer_label'] : '';
         $terminal= isset($s['terminal_label']) ? $s['terminal_label'] : '';
@@ -290,12 +224,14 @@ class ZwennPay_QR_Generator {
             "ConvenienceFeeFixed"                  => $feeFixed > 0 ? $feeFixed : 0,
             "SetConvenienceFeePercentage"          => $feePct > 0,
             "ConvenienceFeePercentage"             => $feePct > 0 ? $feePct : 0,
+            // Bill number: always true when provided (order number in WC context)
             "SetAdditionalBillNumber"              => !empty($bill),
             "AdditionalRequiredBillNumber"         => !empty($bill),
             "AdditionalBillNumber"                 => !empty($bill) ? $bill : "string",
             "SetAdditionalMobileNo"                => !empty($mobile),
             "AdditionalRequiredMobileNo"           => !empty($mobile),
             "AdditionalMobileNo"                   => !empty($mobile) ? $mobile : "string",
+            // Store label: driven by whether it has a value
             "SetAdditionalStoreLabel"              => !empty($store),
             "AdditionalRequiredStoreLabel"         => !empty($store),
             "AdditionalStoreLabel"                 => !empty($store) ? $store : "string",
@@ -317,9 +253,6 @@ class ZwennPay_QR_Generator {
         );
     }
 
-    /**
-     * Build a merchant-ID-only request body (for the preview QR).
-     */
     public function build_merchant_only_body() {
         $options = $this->get_options();
         return array(
@@ -370,30 +303,61 @@ class ZwennPay_QR_Generator {
     }
 
     // -------------------------------------------------------------------------
-    // QR Generated table CRUD
+    // Transaction History CRUD
     // -------------------------------------------------------------------------
 
-    private function save_generated_qr($qr_image, $settings, $label = '', $amount = 0, $purpose = '', $shortcode = '') {
+    /**
+     * Log a transaction (called by WooCommerce gateway on status changes).
+     *
+     * @param string $order_number   WC order number / ID
+     * @param string $bill_number    Same as order number (used as bill number in API)
+     * @param string $reference_number ZwennPay reference extracted from QR EMV data
+     * @param float  $amount
+     * @param string $status         pending | failed | success
+     */
+    public function log_transaction($order_number, $bill_number, $reference_number, $amount, $status = 'pending') {
         global $wpdb;
+        $this->ensure_tx_table_exists();
+
+        // If a row for this order already exists, update it; otherwise insert.
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}" . self::TX_TABLE . " WHERE order_number = %s LIMIT 1",
+            $order_number
+        ));
+
+        if ($existing) {
+            $wpdb->update(
+                $wpdb->prefix . self::TX_TABLE,
+                array(
+                    'status'           => $status,
+                    'reference_number' => $reference_number,
+                    'amount'           => $amount,
+                ),
+                array('id' => $existing),
+                array('%s', '%s', '%f'),
+                array('%d')
+            );
+            return $existing;
+        }
+
         $wpdb->insert(
-            $wpdb->prefix . self::QR_TABLE,
+            $wpdb->prefix . self::TX_TABLE,
             array(
-                'qr_label'   => $label,
-                'amount'     => $amount,
-                'purpose'    => $purpose,
-                'shortcode'  => $shortcode,
-                'qr_image'   => $qr_image,
-                'settings'   => wp_json_encode($settings),
-                'created_at' => current_time('mysql'),
+                'order_number'    => $order_number,
+                'bill_number'     => $bill_number,
+                'reference_number'=> $reference_number,
+                'amount'          => $amount,
+                'status'          => $status,
+                'created_at'      => current_time('mysql'),
             ),
-            array('%s', '%f', '%s', '%s', '%s', '%s', '%s')
+            array('%s', '%s', '%s', '%f', '%s', '%s')
         );
         return $wpdb->insert_id;
     }
 
-    private function get_generated_qrs($page = 1, $per_page = 10) {
+    private function get_transactions($page = 1, $per_page = 10) {
         global $wpdb;
-        $table_name   = $wpdb->prefix . self::QR_TABLE;
+        $table_name   = $wpdb->prefix . self::TX_TABLE;
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'");
         if ($table_exists !== $table_name) return false;
 
@@ -402,7 +366,8 @@ class ZwennPay_QR_Generator {
 
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT id, created_at, qr_label, amount, purpose, shortcode, qr_image, settings FROM $table_name ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                "SELECT id, created_at, order_number, bill_number, reference_number, amount, status
+                 FROM $table_name ORDER BY created_at DESC LIMIT %d OFFSET %d",
                 $per_page, $offset
             ),
             ARRAY_A
@@ -453,10 +418,6 @@ class ZwennPay_QR_Generator {
         wp_send_json(array('success' => $result['success'], 'data' => $result));
     }
 
-    /**
-     * Shared: fetch the merchant-only preview QR from the API and return key data.
-     * Used by both preview-only and generate+save handlers.
-     */
     private function fetch_preview_qr() {
         $preview_result = $this->api_request($this->build_merchant_only_body(), 'Preview (merchant ID only)');
 
@@ -479,10 +440,6 @@ class ZwennPay_QR_Generator {
         );
     }
 
-    /**
-     * AJAX: Preview-only — returns the merchant-ID-only QR image, never saves anything.
-     * Triggered by the "Preview Only" sidebar button.
-     */
     public function ajax_preview_qr_admin() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
@@ -501,64 +458,13 @@ class ZwennPay_QR_Generator {
         ));
     }
 
-    /**
-     * AJAX: Generate QR Code — saves a new full QR (all settings) to the DB
-     * AND returns the merchant-ID-only preview image for the sidebar.
-     * Triggered only when the "Generate QR Code" form submit button is clicked.
-     */
     public function ajax_generate_qr_admin() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
         }
 
-        $options = $this->get_options();
-
-        // Preview image (merchant ID only)
         $preview = $this->fetch_preview_qr();
-
-        // Full QR with all settings — saved to the generated list
-        $full_result = $this->api_request($this->build_request_body(), 'Full (all settings)');
-        $saved       = false;
-        $new_id      = 0;
-
-        if ($full_result['success'] && !empty($full_result['data'])) {
-            $full_qr = $this->generate_qr_base64($full_result['data'], 256);
-
-            if (!empty($full_qr)) {
-                $label   = !empty($options['store_label']) ? $options['store_label'] : 'QR #' . date('YmdHis');
-                $amount  = floatval($options['transaction_amount']);
-                $purpose = $options['purpose_transaction'];
-
-                $sc_atts = 'amount="' . $amount . '"';
-                if (!empty($options['reference_label'])) $sc_atts .= ' reference="' . esc_attr($options['reference_label']) . '"';
-                if (!empty($purpose))                    $sc_atts .= ' purpose="' . esc_attr($purpose) . '"';
-                $shortcode_str = '[zwennpay_qr ' . $sc_atts . ']';
-
-                $log_settings = array(
-                    'merchant_id'                => $options['merchant_id'],
-                    'transaction_amount'         => $options['transaction_amount'],
-                    'convenience_tip'            => $options['convenience_tip'],
-                    'convenience_fee_fixed'      => $options['convenience_fee_fixed'],
-                    'convenience_fee_percentage' => $options['convenience_fee_percentage'],
-                    'bill_number'                => $options['bill_number'],
-                    'mobile_no'                  => $options['mobile_no'],
-                    'store_label'                => $options['store_label'],
-                    'loyalty_number'             => $options['loyalty_number'],
-                    'customer_label'             => $options['customer_label'],
-                    'terminal_label'             => $options['terminal_label'],
-                    'purpose_transaction'        => $options['purpose_transaction'],
-                    'reference_label'            => $options['reference_label'],
-                    'qr_size'                    => $options['qr_size'],
-                    'qr_color'                   => $options['qr_color'],
-                    'merchant_name'              => $preview['merchant_name'],
-                    'merchant_city'              => $preview['merchant_city'],
-                );
-
-                $new_id = $this->save_generated_qr($full_qr, $log_settings, $label, $amount, $purpose, $shortcode_str);
-                $saved  = true;
-            }
-        }
 
         wp_send_json(array(
             'success'       => $preview['result']['success'],
@@ -566,8 +472,7 @@ class ZwennPay_QR_Generator {
             'merchant_name' => $preview['merchant_name'],
             'merchant_city' => $preview['merchant_city'],
             'error'         => $preview['result']['error'],
-            'saved'         => $saved,
-            'new_id'        => $new_id,
+            'saved'         => false,
         ));
     }
 
@@ -588,13 +493,13 @@ class ZwennPay_QR_Generator {
         ));
     }
 
-    public function ajax_get_generated_qrs() {
+    public function ajax_get_transactions() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(array('message' => 'Unauthorized'));
 
-        $this->ensure_qr_table_exists();
+        $this->ensure_tx_table_exists();
         $page   = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
-        $result = $this->get_generated_qrs($page, self::QRS_PER_PAGE);
+        $result = $this->get_transactions($page, self::TXS_PER_PAGE);
 
         if ($result === false) {
             wp_send_json_error(array('message' => 'Database error occurred'));
@@ -603,28 +508,28 @@ class ZwennPay_QR_Generator {
         wp_send_json_success($result);
     }
 
-    public function ajax_delete_generated_qrs() {
+    public function ajax_delete_transactions() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(array('message' => 'Unauthorized'));
 
         global $wpdb;
-        $table_name   = $wpdb->prefix . self::QR_TABLE;
+        $table_name   = $wpdb->prefix . self::TX_TABLE;
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'");
         if ($table_exists === $table_name) {
             $wpdb->query("TRUNCATE TABLE $table_name");
         }
-        wp_send_json_success(array('message' => __('All QR codes deleted successfully', 'zwennpay-qr')));
+        wp_send_json_success(array('message' => __('All transactions deleted successfully', 'zwennpay-qr')));
     }
 
-    public function ajax_delete_single_qr() {
+    public function ajax_delete_single_tx() {
         check_ajax_referer('zwennpay_qr_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(array('message' => 'Unauthorized'));
 
-        $id = isset($_POST['qr_id']) ? intval($_POST['qr_id']) : 0;
+        $id = isset($_POST['tx_id']) ? intval($_POST['tx_id']) : 0;
         if (!$id) wp_send_json_error(array('message' => 'Invalid ID'));
 
         global $wpdb;
-        $wpdb->delete($wpdb->prefix . self::QR_TABLE, array('id' => $id), array('%d'));
+        $wpdb->delete($wpdb->prefix . self::TX_TABLE, array('id' => $id), array('%d'));
         wp_send_json_success(array('message' => 'Deleted'));
     }
 
@@ -637,30 +542,29 @@ class ZwennPay_QR_Generator {
 
         wp_enqueue_script('html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', array(), '1.4.1', true);
         wp_enqueue_script('jspdf',       'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',         array(), '2.5.1', true);
-        wp_enqueue_script('zwennpay-qrcode-admin', plugins_url('assets/js/admin.js', __FILE__), array('jquery', 'html2canvas', 'jspdf'), '1.1.0', true);
+        wp_enqueue_script('zwennpay-qrcode-admin', plugins_url('assets/js/admin.js', __FILE__), array('jquery', 'html2canvas', 'jspdf'), '1.3.0', true);
 
         wp_localize_script('zwennpay-qrcode-admin', 'zwennpayAdmin', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce'   => wp_create_nonce('zwennpay_qr_nonce'),
             'strings' => array(
-                'testing'          => 'Testing...',
-                'generating'       => 'Generating...',
-                'success'          => 'Success!',
-                'error'            => 'Error:',
-                'loading_qrs'      => 'Loading generated QR codes...',
-                'no_qrs'           => 'No QR codes generated yet. Click "Generate QR Code" to create one.',
-                'confirm_delete_all'  => 'Are you sure you want to delete ALL generated QR codes? This cannot be undone.',
-                'confirm_delete_one'  => 'Delete this QR code?',
-                'deleted'          => 'Deleted successfully.',
-                'error_loading'    => 'Error loading QR codes.',
-                'downloading'      => 'Preparing PDF...',
-                'download_error'   => 'Error generating PDF. Please try again.',
-                'no_preview'       => 'Please generate a QR code preview first.',
-                'copy_success'     => 'Shortcode copied!',
+                'testing'              => 'Testing...',
+                'generating'           => 'Generating...',
+                'success'              => 'Success!',
+                'error'                => 'Error:',
+                'loading_transactions' => 'Loading transaction history...',
+                'no_transactions'      => 'No transactions recorded yet.',
+                'confirm_delete_all'   => 'Are you sure you want to delete ALL transaction history? This cannot be undone.',
+                'confirm_delete_one'   => 'Delete this transaction record?',
+                'deleted'              => 'Deleted successfully.',
+                'error_loading'        => 'Error loading transactions.',
+                'downloading'          => 'Preparing PDF...',
+                'download_error'       => 'Error generating PDF. Please try again.',
+                'no_preview'           => 'Please generate a QR code preview first.',
             ),
         ));
 
-        wp_enqueue_style('zwennpay-qrcode-admin', plugins_url('assets/css/admin.css', __FILE__), array(), '1.1.0');
+        wp_enqueue_style('zwennpay-qrcode-admin', plugins_url('assets/css/admin.css', __FILE__), array(), '1.3.0');
     }
 
     public function enqueue_frontend_scripts() {
@@ -677,18 +581,7 @@ class ZwennPay_QR_Generator {
     // QR generation helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Generate a base64-encoded PNG QR code.
-     *
-     * @param string $text        Data to encode.
-     * @param int    $display_size Desired display size in px (used to pick module size).
-     *                            Always renders at a high internal resolution so the
-     *                            image stays crisp when scaled up or down via CSS.
-     */
     public function generate_qr_base64($text, $display_size = 256) {
-        // Always generate at a high internal resolution (≥600 px) for crispness.
-        // phpqrcode's 4th argument is the module (block) size in pixels; we pick
-        // a module size that results in ~600 px total regardless of display_size.
         $internal_size = max(600, intval($display_size) * 2);
         $module_size   = max(8, intval(round($internal_size / 60)));
 
@@ -723,15 +616,15 @@ class ZwennPay_QR_Generator {
         }
 
         $size        = $atts['size'] > 0 ? intval($atts['size']) : intval($options['qr_size']);
-        $size        = max(200, $size); // never smaller than 200 px
+        $size        = max(200, $size);
         $color       = !empty($atts['color']) ? $atts['color'] : $options['qr_color'];
         $show_amount = filter_var($atts['show_amount'], FILTER_VALIDATE_BOOLEAN);
         $show_form   = filter_var($atts['show_form'], FILTER_VALIDATE_BOOLEAN);
 
         $overrides = array();
-        if ($atts['amount'] > 0)     $overrides['transaction_amount']  = $atts['amount'];
-        if (!empty($atts['reference'])) $overrides['reference_label']  = $atts['reference'];
-        if (!empty($atts['purpose']))   $overrides['purpose_transaction'] = $atts['purpose'];
+        if ($atts['amount'] > 0)        $overrides['transaction_amount']    = $atts['amount'];
+        if (!empty($atts['reference'])) $overrides['reference_label']       = $atts['reference'];
+        if (!empty($atts['purpose']))   $overrides['purpose_transaction']   = $atts['purpose'];
 
         $result        = $this->api_request($this->build_request_body($overrides));
         $merchant_name = '';
@@ -767,13 +660,9 @@ class ZwennPay_QR_Generator {
 
             <div class="zwennpay-qr-display" style="text-align:center;">
                 <?php if ($result['success'] && !empty($result['data'])): ?>
-
-                    <!-- Top logo (maucas) -->
                     <img src="<?php echo esc_url($plugin_url . 'assets/maucas-logo.svg'); ?>"
                          alt="Maucas"
                          style="display:block;margin:0 auto;transform:scale(7.2);height:48px;width:auto;">
-
-                    <!-- QR code image -->
                     <div class="zwennpay-qr-image" style="margin-top:10px;text-align:center;">
                         <img src="<?php echo esc_attr($this->generate_qr_base64($result['data'], $size)); ?>"
                              alt="Payment QR Code"
@@ -781,16 +670,12 @@ class ZwennPay_QR_Generator {
                              height="<?php echo esc_attr($size); ?>"
                              style="display:block;margin:0 auto;max-width:100%;height:auto;image-rendering:crisp-edges;image-rendering:-moz-crisp-edges;image-rendering:pixelated;">
                     </div>
-
-                    <!-- Bottom logo (ZwennPay) -->
                     <img src="<?php echo esc_url($plugin_url . 'assets/Zvenn-Pay-logo.png'); ?>"
                          alt="ZwennPay"
                          style="display:block;margin:0 auto;height:35px;width:auto;margin-left:auto;margin-right:auto;margin-top:-15px;margin-bottom:-10px;">
-
                     <?php if ($show_amount && $atts['amount'] > 0): ?>
                         <div class="zwennpay-qr-amount" style="text-align:center;font-weight:bold;margin-top:14px;">Rs <?php echo esc_html(number_format($atts['amount'], 2)); ?></div>
                     <?php endif; ?>
-
                 <?php else: ?>
                     <div class="zwennpay-error"><strong>Error:</strong> <?php echo esc_html($result['error']); ?></div>
                 <?php endif; ?>
@@ -810,14 +695,16 @@ class ZwennPay_QR_Generator {
         $type        = 'text';
         $extra_attrs = '';
 
-        switch ($field_name) {
-            case 'merchant_id':   $type = 'number'; $extra_attrs = 'min="1" max="1000" required data-max="1000"'; break;
-            case 'bill_number':   $type = 'number'; $extra_attrs = 'max="100000" data-max="100000"'; break;
-            case 'mobile_no':     $extra_attrs = 'maxlength="8" pattern="[0-9]{8}" data-limit="8" inputmode="numeric"'; break;
-            case 'loyalty_number':$type = 'number'; $extra_attrs = 'max="10000" data-max="10000"'; break;
+        if ($field_name === 'merchant_id') {
+            $type        = 'number';
+            $extra_attrs = 'min="1" max="1000" required data-max="1000"';
         }
 
         echo '<input type="' . esc_attr($type) . '" name="' . self::OPTION_NAME . '[' . esc_attr($field_name) . ']" value="' . esc_attr($value) . '" class="regular-text" ' . $extra_attrs . '>';
+
+        /*if ($field_name === 'store_label') {
+            echo '<p class="description">' . esc_html__('When set, the store label is included in the QR data sent to ZwennPay.', 'zwennpay-qr') . '</p>';
+        }*/
     }
 
     public function render_number_field($field_name) {
@@ -826,29 +713,7 @@ class ZwennPay_QR_Generator {
         $min     = '0';
         $max     = '';
         $step    = '0.01';
-
-        switch ($field_name) {
-            case 'transaction_amount':       $max = ' max="250000" data-max="250000"'; break;
-            case 'convenience_tip':
-            case 'convenience_fee_fixed':    $max = ' max="1000" data-max="1000"'; break;
-            case 'convenience_fee_percentage': $max = ' max="100" data-max="100"'; break;
-            case 'qr_size':                  $min = '64'; $max = ' max="1024"'; $step = '1'; break;
-        }
-
         echo '<input type="number" name="' . self::OPTION_NAME . '[' . esc_attr($field_name) . ']" value="' . esc_attr($value) . '" class="regular-text" step="' . esc_attr($step) . '" min="' . esc_attr($min) . '"' . $max . '>';
-        if ($field_name === 'qr_size') echo '<p class="description">QR code size in pixels (64-1024)</p>';
-    }
-
-    public function render_color_field($field_name) {
-        $options = $this->get_options();
-        $value   = isset($options[$field_name]) ? $options[$field_name] : '#000000';
-        echo '<input type="color" name="' . self::OPTION_NAME . '[' . esc_attr($field_name) . ']" value="' . esc_attr($value) . '">';
-    }
-
-    public function render_checkbox_field($field_name) {
-        $options = $this->get_options();
-        $value   = isset($options[$field_name]) ? $options[$field_name] : 0;
-        echo '<label><input type="checkbox" name="' . self::OPTION_NAME . '[' . esc_attr($field_name) . ']" value="1" ' . checked($value, 1, false) . '> Display amount below QR code</label>';
     }
 
     // -------------------------------------------------------------------------
@@ -867,93 +732,34 @@ class ZwennPay_QR_Generator {
                     <form method="post" action="options.php" id="zwennpay-settings-form">
                         <?php settings_fields('zwennpay_qr_options_group'); ?>
 
-                        <!-- ── Main visible fields ── -->
                         <table class="form-table" role="presentation">
                             <tr>
-                                <th scope="row"><label for="zwennpay_merchant_id"><?php esc_html_e('Merchant ID', 'zwennpay-qr'); ?></label></th>
+                                <th scope="row"><label><?php esc_html_e('Merchant ID', 'zwennpay-qr'); ?></label></th>
                                 <td><?php $this->render_text_field('merchant_id'); ?></td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="zwennpay_transaction_amount"><?php esc_html_e('Transaction Amount', 'zwennpay-qr'); ?></label></th>
-                                <td><?php $this->render_number_field('transaction_amount'); ?></td>
+                                <th scope="row"><label><?php esc_html_e('Store Label', 'zwennpay-qr'); ?></label></th>
+                                <td><?php $this->render_text_field('store_label'); ?></td>
                             </tr>
                         </table>
 
-                        <!-- ── Advanced toggle ── -->
-                        <p style="margin-top:12px;">
-                            <button type="button" id="zwennpay-advanced-toggle" class="button button-secondary">
-                                <span class="dashicons dashicons-arrow-down-alt2" style="vertical-align:middle;margin-top:-2px;font-size:16px;"></span>
-                                <?php esc_html_e('Advanced Options', 'zwennpay-qr'); ?>
-                            </button>
-                        </p>
-
-                        <!-- ── Advanced fields (hidden by default) ── -->
-                        <div id="zwennpay-advanced-section" style="display:none;">
-                            <h2 class="title"><?php esc_html_e('Convenience Fees', 'zwennpay-qr'); ?></h2>
-                            <table class="form-table" role="presentation">
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Convenience Tip', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_number_field('convenience_tip'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Fixed Fee', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_number_field('convenience_fee_fixed'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Percentage Fee', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_number_field('convenience_fee_percentage'); ?></td>
-                                </tr>
-                            </table>
-
-                            <h2 class="title"><?php esc_html_e('Additional Information', 'zwennpay-qr'); ?></h2>
-                            <table class="form-table" role="presentation">
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Bill Number', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('bill_number'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Mobile Number', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('mobile_no'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Store Label', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('store_label'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Loyalty Number', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('loyalty_number'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Customer Label', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('customer_label'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Terminal Label', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('terminal_label'); ?></td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><?php esc_html_e('Purpose of Transaction', 'zwennpay-qr'); ?></th>
-                                    <td><?php $this->render_text_field('purpose_transaction'); ?></td>
-                                </tr>
-                            </table>
-                        </div><!-- /#zwennpay-advanced-section -->
-
-                        <?php submit_button(__('Generate QR Code', 'zwennpay-qr')); ?>
+                        <?php submit_button(__('Save Settings', 'zwennpay-qr')); ?>
                     </form>
                 </div>
 
+                <!-- Sidebar preview -->
                 <div class="zwennpay-settings-sidebar">
                     <div class="zwennpay-preview-box" id="zwennpay-preview-box">
                         <div id="zwennpay-preview-container">
                             <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/maucas-logo.svg'); ?>" alt="QR Code" style="display:block;margin:0 auto 10px;transform:scale(7.2);height:48px;width:auto;">
-                            <p id="zwennpay-preview-text">Click "Generate QR Code" to see QR</p>
+                            <p id="zwennpay-preview-text">Click "Preview QR" to preview</p>
                             <div id="zwennpay-preview-qr" style="display:none;"></div>
                             <img src="<?php echo esc_url(plugin_dir_url(__FILE__) . 'assets/Zvenn-Pay-logo.png'); ?>" alt="ZwennPay" style="display:block;height:35px;width:auto;margin:-10px 0 -10px;">
                             <div class="Zvenn-Pay-logo"></div>
                             <p id="zwennpay-preview-amount" style="display:none;"></p>
                         </div>
                         <div class="zwennpay-preview-buttons">
-                            <button type="button" id="zwennpay-generate-preview" class="button button-secondary" style="flex:1;"><?php _e('Preview Only', 'zwennpay-qr'); ?></button>
+                            <button type="button" id="zwennpay-generate-preview" class="button button-secondary" style="flex:1;"><?php _e('Preview QR', 'zwennpay-qr'); ?></button>
                             <button type="button" id="zwennpay-download-pdf" class="button button-primary" style="flex:1;" disabled>
                                 <span class="dashicons dashicons-download" style="vertical-align:middle;margin-top:-2px;"></span>
                                 <?php _e('Download PDF', 'zwennpay-qr'); ?>
@@ -962,33 +768,28 @@ class ZwennPay_QR_Generator {
                     </div>
                 </div>
 
-                <!-- QR Generated Section -->
+                <!-- Transaction History Section -->
                 <div class="zwennpay-history-section" style="margin-bottom:20px;">
                     <div class="zwennpay-history-header" style="display:flex;justify-content:space-between;align-items:center;">
                         <h2 style="margin:0;font-size:1.3em;">
-                            <span class="dashicons dashicons-qr-code" style="vertical-align:middle;margin-right:5px;display:none;"></span>
-                            <?php esc_html_e('QR Generated', 'zwennpay-qr'); ?>
+                            <?php esc_html_e('Transaction History', 'zwennpay-qr'); ?>
                         </h2>
-                        <button type="button" id="zwennpay-clear-qrs" class="button button-link-delete" title="<?php esc_attr_e('Delete all generated QR codes', 'zwennpay-qr'); ?>" style="display:none;">
-                            <span class="dashicons dashicons-trash" style="vertical-align:middle;"></span>
-                            <?php esc_html_e('Clear All', 'zwennpay-qr'); ?>
-                        </button>
                     </div>
 
-                    <div id="zwennpay-qrs-container" class="zwennpay-logs-card">
+                    <div id="zwennpay-tx-container" class="zwennpay-logs-card">
                         <table class="wp-list-table widefat fixed striped zwennpay-logs-table">
                             <thead>
                                 <tr>
-                                    <th style="width:130px;"><?php esc_html_e('Date & Time', 'zwennpay-qr'); ?></th>
-                                    <th style="width:80px;display:none;"><?php esc_html_e('QR Code', 'zwennpay-qr'); ?></th>
-                                    <th><?php esc_html_e('Details', 'zwennpay-qr'); ?></th>
-                                    <th style="width:220px;"><?php esc_html_e('Shortcode', 'zwennpay-qr'); ?></th>
-                                    <th style="width:60px;"><?php esc_html_e('Action', 'zwennpay-qr'); ?></th>
+                                    <th style="width:140px;"><?php esc_html_e('Date & Time', 'zwennpay-qr'); ?></th>
+                                    <th style="width:100px;"><?php esc_html_e('Order #', 'zwennpay-qr'); ?></th>
+                                    <th><?php esc_html_e('Reference Number', 'zwennpay-qr'); ?></th>
+                                    <th style="width:110px;"><?php esc_html_e('Amount', 'zwennpay-qr'); ?></th>
+                                    <th style="width:90px;"><?php esc_html_e('Status', 'zwennpay-qr'); ?></th>
                                 </tr>
                             </thead>
-                            <tbody id="zwennpay-qrs-body">
+                            <tbody id="zwennpay-tx-body">
                                 <tr>
-                                    <td colspan="4" style="text-align:center;padding:30px;">
+                                    <td colspan="6" style="text-align:center;padding:30px;">
                                         <span class="spinner is-active" style="float:none;vertical-align:middle;"></span>
                                         <?php esc_html_e('Loading...', 'zwennpay-qr'); ?>
                                     </td>
@@ -996,10 +797,10 @@ class ZwennPay_QR_Generator {
                             </tbody>
                         </table>
 
-                        <div id="zwennpay-qrs-pagination" class="tablenav bottom" style="display:none;">
+                        <div id="zwennpay-tx-pagination" class="tablenav bottom" style="display:none;">
                             <div class="tablenav-pages">
-                                <span class="displaying-num" id="zwennpay-qrs-count"></span>
-                                <span class="pagination-links" id="zwennpay-qrs-links"></span>
+                                <span class="displaying-num" id="zwennpay-tx-count"></span>
+                                <span class="pagination-links" id="zwennpay-tx-links"></span>
                             </div>
                         </div>
                     </div>
@@ -1012,31 +813,19 @@ class ZwennPay_QR_Generator {
 }
 
 register_activation_hook(__FILE__, array('ZwennPay_QR_Generator', 'activate'));
-new ZwennPay_QR_Generator();
-
-// DEBUG - Remove after testing
-error_log('=== ZWENNPAY DEBUG START ===');
-error_log('File exists: ' . (file_exists(plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php') ? 'YES' : 'NO'));
-error_log('WC active: ' . (class_exists('WooCommerce') ? 'YES' : 'NO'));
-error_log('Plugin file: ' . __FILE__);
-error_log('Gateway file: ' . plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php');
+$GLOBALS['zwennpay_qr_instance'] = new ZwennPay_QR_Generator();
 
 // =============================================================================
-// WooCommerce Integration - Load Immediately
+// WooCommerce Integration
 // =============================================================================
 
 add_action('plugins_loaded', 'zwennpay_init_gateway', 11);
 
 function zwennpay_init_gateway() {
-
-    // Make sure WooCommerce is active
     if (!class_exists('WooCommerce')) {
         return;
     }
-
-    // Load the gateway class
     $gateway_file = plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php';
-
     if (file_exists($gateway_file)) {
         require_once $gateway_file;
     }
@@ -1045,15 +834,9 @@ function zwennpay_init_gateway() {
 add_filter('woocommerce_payment_gateways', 'zwennpay_add_gateway_class');
 
 function zwennpay_add_gateway_class($gateways) {
-    error_log('zwennpay_add_gateway_class called with ' . count($gateways) . ' gateways');
-    
     if (class_exists('WC_Gateway_Zwennpay')) {
         $gateways[] = 'WC_Gateway_Zwennpay';
-        error_log('ZwennPay gateway ADDED');
-    } else {
-        error_log('ERROR: WC_Gateway_Zwennpay class not found!');
     }
-    
     return $gateways;
 }
 
@@ -1064,24 +847,16 @@ function zwennpay_add_gateway_class($gateways) {
 register_activation_hook(__FILE__, 'zwennpay_create_checkout_page');
 
 function zwennpay_create_checkout_page() {
-
-    // ✅ Check if WooCommerce is active
     if (!class_exists('WooCommerce')) {
-
-        // Deactivate this plugin
         deactivate_plugins(plugin_basename(__FILE__));
-
-        // Show error message
         wp_die(
             'ZwennPay requires WooCommerce to be installed and activated.',
             'Plugin dependency check',
             array('back_link' => true)
         );
-
         return;
     }
 
-    // ✅ Create or get checkout page
     $existing_page = get_page_by_path('zwennpay-checkout');
 
     if ($existing_page) {
@@ -1096,11 +871,9 @@ function zwennpay_create_checkout_page() {
         ));
     }
 
-    // ✅ Set as WooCommerce checkout page
     if ($page_id && !is_wp_error($page_id)) {
         update_option('woocommerce_checkout_page_id', $page_id);
     }
 
-    // ✅ Refresh permalinks
     flush_rewrite_rules();
 }

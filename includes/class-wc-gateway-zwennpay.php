@@ -3,7 +3,7 @@
  * WooCommerce Payment Gateway for ZwennPay QR
  *
  * @package ZwennPay_QR
- * @since 1.2.0
+ * @since 1.3.0
  */
 
 if (!defined('ABSPATH')) {
@@ -12,152 +12,47 @@ if (!defined('ABSPATH')) {
 
 class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
 
-    /**
-     * API endpoint for generating QR codes
-     */
-    const API_URL = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQR';
+    const API_URL            = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQR';
+    const STATUS_API_URL     = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQRPaymentStatus';
+    const DEFAULT_TIMEOUT_MINUTES   = 5;
+    const DEFAULT_INTERVAL_SECONDS  = 15;
 
-    /**
-     * API endpoint for checking payment status
-     */
-    const STATUS_API_URL = 'https://apiuat.zwennpay.com:9425/api/v1.0/Common/GetMerchantQRPaymentStatus';
-
-    /**
-     * Default timeout in minutes
-     */
-    const DEFAULT_TIMEOUT_MINUTES = 5;
-
-    /**
-     * Default check interval in seconds
-     */
-    const DEFAULT_INTERVAL_SECONDS = 15;
-
-    /**
-     * Gateway ID
-     *
-     * @var string
-     */
     public $id;
-
-    /**
-     * Gateway icon
-     *
-     * @var string
-     */
     public $icon;
-
-    /**
-     * Whether gateway has fields
-     *
-     * @var bool
-     */
     public $has_fields;
-
-    /**
-     * Gateway method title (admin)
-     *
-     * @var string
-     */
     public $method_title;
-
-    /**
-     * Gateway method description (admin)
-     *
-     * @var string
-     */
     public $method_description;
-
-    /**
-     * Gateway title (checkout)
-     *
-     * @var string
-     */
     public $title;
-
-    /**
-     * Gateway description (checkout)
-     *
-     * @var string
-     */
     public $description;
-
-    /**
-     * Payment timeout in minutes
-     *
-     * @var int
-     */
     public $timeout_minutes;
-
-    /**
-     * Status check interval in seconds
-     *
-     * @var int
-     */
     public $check_interval;
-
-    /**
-     * Supported features
-     *
-     * @var array
-     */
     public $supports;
-
-    /**
-     * Form fields for admin settings
-     *
-     * @var array
-     */
     public $form_fields;
 
-    /**
-     * Constructor
-     */
     public function __construct() {
         $this->id                 = 'zwennpay';
         $this->icon               = '';
         $this->has_fields         = true;
         $this->method_title       = __('ZwennPay QR', 'zwennpay-qr');
         $this->method_description = __('Accept payments via ZwennPay QR code. Customers scan the QR code with their mobile banking app to pay.', 'zwennpay-qr');
-        $this->supports           = array(
-            'products',
-            'refunds',
-        );
+        $this->supports           = array('products', 'refunds');
 
-        // Load settings
         $this->init_form_fields();
         $this->init_settings();
 
-        $this->enabled = $this->get_option('enabled');
-
-        error_log('Gateway enabled: ' . $this->enabled);
-
-        // Define properties from settings
+        $this->enabled         = $this->get_option('enabled');
         $this->title           = $this->get_option('title');
         $this->description     = $this->get_option('description');
         $this->timeout_minutes = intval($this->get_option('timeout_minutes', self::DEFAULT_TIMEOUT_MINUTES));
         $this->check_interval  = intval($this->get_option('check_interval_seconds', self::DEFAULT_INTERVAL_SECONDS));
 
-        // Save settings hook
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
-
-        // AJAX endpoint for checking payment status
-        add_action('wp_ajax_zwennpay_wc_check_status', array($this, 'ajax_check_payment_status'));
-        add_action('wp_ajax_nopriv_zwennpay_wc_check_status', array($this, 'ajax_check_payment_status'));
-
-        // Enqueue scripts on pay page
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_checkout_scripts'));
-
-        // Display QR on pay page
-        add_action('woocommerce_receipt_zwennpay', array($this, 'render_payment_page'));
-        add_filter('woocommerce_available_payment_gateways', function($gateways) {
-    error_log('Available gateways: ' . print_r(array_keys($gateways), true));
-    return $gateways;
-});
+        add_action('wp_ajax_zwennpay_wc_confirm_payment',        array($this, 'ajax_confirm_payment'));
+        add_action('wp_ajax_nopriv_zwennpay_wc_confirm_payment', array($this, 'ajax_confirm_payment'));
+        add_action('wp_enqueue_scripts',                       array($this, 'enqueue_checkout_scripts'));
+        add_action('woocommerce_receipt_zwennpay',             array($this, 'render_payment_page'));
     }
 
-    /**
-     * Initialize form fields for admin settings
-     */
     public function init_form_fields() {
         $this->form_fields = array(
             'enabled' => array(
@@ -202,52 +97,40 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                 'title'       => __('Instructions', 'zwennpay-qr'),
                 'type'        => 'textarea',
                 'description' => __('Instructions shown on the payment page after order placement.', 'zwennpay-qr'),
-                'default' => __("1. Open your mobile banking app
-2. Scan the QR code below
-3. Confirm the payment amount
-4. Wait for payment confirmation", 'zwennpay-qr'),
+                'default'     => __("1. Open your mobile banking app\n2. Scan the QR code below\n3. Confirm the payment amount\n4. Wait for payment confirmation", 'zwennpay-qr'),
                 'desc_tip'    => true,
             ),
         );
     }
 
-    /**
-     * Check if gateway is available
-     * Works for both physical and virtual orders
-     */
-public function is_available() {
-    error_log('ZwennPay is_available called');
-
-    if (!WC()->cart) {
-        error_log('No cart');
-        return false;
+    public function is_available() {
+        if (!WC()->cart) {
+            return false;
+        }
+        return true;
     }
 
-    error_log('Cart total: ' . WC()->cart->total);
+    // -------------------------------------------------------------------------
+    // Process payment
+    // -------------------------------------------------------------------------
 
-    return true;
-}
-
-    /**
-     * Process payment - called when order is placed
-     */
     public function process_payment($order_id) {
         $order = wc_get_order($order_id);
-        
+
         if (!$order) {
             wc_add_notice(__('Invalid order.', 'zwennpay-qr'), 'error');
             return array('result' => 'failure');
         }
 
-        $amount = floatval($order->get_total());
-        
-        // Get ZwennPay options from main plugin
+        $amount       = floatval($order->get_total());
+        $order_number = $order->get_order_number();   // Human-readable order number
+
+        // Get ZwennPay plugin options
         $zwennpay_options = get_option('zwennpay_qr_options', array());
 
-        // Build request body with order-specific data
-        $body = $this->build_request_body($amount, $order_id, $order, $zwennpay_options);
+        // Build API request — order number is used as bill number
+        $body = $this->build_request_body($amount, $order_number, $order, $zwennpay_options);
 
-        // Call API to generate QR code
         $response = $this->api_request($body);
 
         if (!$response['success'] || empty($response['data'])) {
@@ -256,65 +139,75 @@ public function is_available() {
                 sprintf(__('Failed to generate QR code: %s. Please try again or choose another payment method.', 'zwennpay-qr'), $error_msg),
                 'error'
             );
+
+            // Log failed transaction
+            $this->record_transaction($order_number, $order_number, '', $amount, 'failed');
+
             return array('result' => 'failure');
         }
 
-        // Parse EMV data to extract reference from ID 62, sub-TLV 05
+        // Extract reference from EMV ID 62 → sub-TLV 05
         $reference = $this->extract_reference_from_emv($response['data']);
-        
+
         if (empty($reference)) {
             wc_add_notice(__('Failed to extract payment reference from QR code. Please contact support.', 'zwennpay-qr'), 'error');
+
+            $this->record_transaction($order_number, $order_number, '', $amount, 'failed');
+
             return array('result' => 'failure');
         }
 
-        // Generate QR image
         $qr_image = $this->generate_qr_base64($response['data']);
 
         if (empty($qr_image)) {
             wc_add_notice(__('Failed to generate QR image. Please try again.', 'zwennpay-qr'), 'error');
+
+            $this->record_transaction($order_number, $order_number, $reference, $amount, 'failed');
+
             return array('result' => 'failure');
         }
 
-        // Store payment data in order meta
-        $order->update_meta_data('_zwennpay_qr_data', $response['data']);
-        $order->update_meta_data('_zwennpay_reference', $reference);
-        $order->update_meta_data('_zwennpay_qr_image', $qr_image);
-        $order->update_meta_data('_zwennpay_payment_status', 'pending');
-        $order->update_meta_data('_zwennpay_payment_started', current_time('mysql'));
+        // Persist QR data on the order
+        $order->update_meta_data('_zwennpay_qr_data',         $response['data']);
+        $order->update_meta_data('_zwennpay_reference',        $reference);
+        $order->update_meta_data('_zwennpay_qr_image',         $qr_image);
+        $order->update_meta_data('_zwennpay_payment_status',   'pending');
+        $order->update_meta_data('_zwennpay_payment_started',  current_time('mysql'));
         $order->save();
 
-        // Set order status to pending payment
         $order->update_status('pending-payment', __('Awaiting ZwennPay QR payment', 'zwennpay-qr'));
 
-        // Return success with redirect to payment page
+        // Log pending transaction
+        $this->record_transaction($order_number, $order_number, $reference, $amount, 'pending');
+
         return array(
             'result'   => 'success',
             'redirect' => $order->get_checkout_payment_url(true),
         );
     }
 
-    /**
-     * Enqueue scripts on WooCommerce pay page
-     */
+    // -------------------------------------------------------------------------
+    // Enqueue scripts
+    // -------------------------------------------------------------------------
+
     public function enqueue_checkout_scripts() {
         if (!function_exists('is_checkout_pay_page') || !is_checkout_pay_page()) {
             return;
         }
 
         $order_id = absint(get_query_var('order-pay'));
-        $order = wc_get_order($order_id);
+        $order    = wc_get_order($order_id);
 
         if (!$order || $order->get_payment_method() !== $this->id) {
             return;
         }
 
-        // Check if already paid
         if ($order->has_status(array('processing', 'completed', 'paid'))) {
             return;
         }
 
         $reference = $order->get_meta('_zwennpay_reference');
-        
+
         if (empty($reference)) {
             return;
         }
@@ -339,9 +232,9 @@ public function is_available() {
             'nonce'        => wp_create_nonce('zwennpay_wc_nonce'),
             'orderId'      => $order_id,
             'reference'    => $reference,
-            'timeout'      => $this->timeout_minutes * 60 * 1000, // Convert to milliseconds
-            'interval'     => $this->check_interval * 1000,        // Convert to milliseconds
-            'statusApiUrl' => self::STATUS_API_URL,
+            'timeout'      => $this->timeout_minutes * 60 * 1000,
+            'interval'     => $this->check_interval * 1000,
+            'statusApiUrl' => self::STATUS_API_URL,  // polled directly by browser
             'strings'      => array(
                 'checking'       => __('Checking payment status...', 'zwennpay-qr'),
                 'paid'           => __('Payment received! Redirecting...', 'zwennpay-qr'),
@@ -357,10 +250,10 @@ public function is_available() {
         ));
     }
 
-    /**
-     * Render payment page with QR code
-     * Hooked to woocommerce_receipt_zwennpay
-     */
+    // -------------------------------------------------------------------------
+    // Render payment page
+    // -------------------------------------------------------------------------
+
     public function render_payment_page($order_id) {
         $order = wc_get_order($order_id);
 
@@ -369,38 +262,31 @@ public function is_available() {
             return;
         }
 
-        // Check if already paid - redirect to thank you page
         if ($order->has_status(array('processing', 'completed', 'paid'))) {
             wp_safe_redirect($order->get_checkout_order_received_url());
             exit;
         }
 
-        $qr_image  = $order->get_meta('_zwennpay_qr_image');
-        $reference = $order->get_meta('_zwennpay_reference');
-        $amount    = $order->get_total();
+        $qr_image     = $order->get_meta('_zwennpay_qr_image');
+        $reference    = $order->get_meta('_zwennpay_reference');
+        $amount       = $order->get_total();
         $instructions = $this->get_option('instructions', '');
 
         if (empty($qr_image) || empty($reference)) {
-            echo '<div class="woocommerce-error">' . 
-                 esc_html__('QR code not available. The payment session may have expired. Please contact support or place a new order.', 'zwennpay-qr') . 
+            echo '<div class="woocommerce-error">' .
+                 esc_html__('QR code not available. The payment session may have expired. Please contact support or place a new order.', 'zwennpay-qr') .
                  '</div>';
             return;
         }
 
-        // Get plugin URL for logos
         $plugin_url = plugin_dir_url(dirname(__FILE__));
-
         ?>
         <div id="zwennpay-wc-payment" class="zwennpay-wc-payment">
-            
+
             <div class="zwennpay-wc-header">
-                <h3><?php esc_html_e('Pay with ZwennPay QR', 'zwennpay-qr'); ?></h3>
+                <h3><?php esc_html_e('Scan to Pay', 'zwennpay-qr'); ?></h3>
                 <p class="zwennpay-wc-order-info">
-                    <?php printf(
-                        /* translators: %s: order number */
-                        esc_html__('Order #%s', 'zwennpay-qr'),
-                        esc_html($order->get_order_number())
-                    ); ?>
+                    <?php printf(esc_html__('Order #%s', 'zwennpay-qr'), esc_html($order->get_order_number())); ?>
                 </p>
             </div>
 
@@ -410,26 +296,22 @@ public function is_available() {
             </div>
 
             <div class="zwennpay-wc-qr-container">
-                <!-- Top logo (maucas) -->
-                <img src="<?php echo esc_url($plugin_url . 'assets/maucas-logo.svg'); ?>" 
-                     alt="Maucas" 
+                <img src="<?php echo esc_url($plugin_url . 'assets/maucas-logo.svg'); ?>"
+                     alt="Maucas"
                      class="zwennpay-wc-logo-top">
-                
-                <!-- QR Code -->
+
                 <div class="zwennpay-wc-qr-image">
-                    <img src="<?php echo esc_attr($qr_image); ?>" 
+                    <img src="<?php echo esc_attr($qr_image); ?>"
                          alt="<?php esc_attr_e('Payment QR Code', 'zwennpay-qr'); ?>">
                 </div>
-                
-                <!-- Bottom logo (ZwennPay) -->
-                <img src="<?php echo esc_url($plugin_url . 'assets/Zvenn-Pay-logo.png'); ?>" 
-                     alt="ZwennPay" 
+
+                <img src="<?php echo esc_url($plugin_url . 'assets/Zvenn-Pay-logo.png'); ?>"
+                     alt="ZwennPay"
                      class="zwennpay-wc-logo-bottom">
             </div>
 
             <div class="zwennpay-wc-reference">
                 <?php printf(
-                    /* translators: %s: reference number */
                     esc_html__('Reference: %s', 'zwennpay-qr'),
                     '<strong>' . esc_html($reference) . '</strong>'
                 ); ?>
@@ -439,11 +321,11 @@ public function is_available() {
                 <div class="zwennpay-wc-instructions">
                     <h4><?php esc_html_e('How to Pay:', 'zwennpay-qr'); ?></h4>
                     <ol>
-                        <?php foreach (explode("\n", $instructions) as $line) : 
+                        <?php foreach (explode("\n", $instructions) as $line) :
                             $line = trim($line);
                             if (!empty($line)) : ?>
                                 <li><?php echo esc_html($line); ?></li>
-                            <?php endif; 
+                            <?php endif;
                         endforeach; ?>
                     </ol>
                 </div>
@@ -465,30 +347,31 @@ public function is_available() {
             </div>
 
             <div class="zwennpay-wc-footer-note">
-                <p>
-                    <em><?php esc_html_e('Please do not close this page or navigate away until payment is confirmed.', 'zwennpay-qr'); ?></em>
-                </p>
-                <p>
-                    <?php printf(
-                        /* translators: %s: timeout in minutes */
-                        esc_html__('If payment is not received within %s minutes, the QR code will expire.', 'zwennpay-qr'),
-                        esc_html($this->timeout_minutes)
-                    ); ?>
-                </p>
+                <p><em><?php esc_html_e('Please do not close this page or navigate away until payment is confirmed.', 'zwennpay-qr'); ?></em></p>
+                <p><?php printf(
+                    esc_html__('If payment is not received within %s minutes, the QR code will expire.', 'zwennpay-qr'),
+                    esc_html($this->timeout_minutes)
+                ); ?></p>
             </div>
 
         </div>
         <?php
     }
 
+    // -------------------------------------------------------------------------
+    // AJAX: confirm payment (called by browser after ZwennPay API says paid)
+    // -------------------------------------------------------------------------
+
     /**
-     * AJAX handler for checking payment status
+     * Called once by the browser when the direct ZwennPay status poll returns
+     * ResponseCode "00". Marks the WC order as paid and returns the redirect URL.
+     * No outbound API call is made here — the browser already confirmed payment.
      */
-    public function ajax_check_payment_status() {
+    public function ajax_confirm_payment() {
         check_ajax_referer('zwennpay_wc_nonce', 'nonce');
 
-        $order_id  = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
-        $reference = isset($_POST['reference']) ? sanitize_text_field($_POST['reference']) : '';
+        $order_id  = isset($_POST['order_id'])  ? absint($_POST['order_id'])                    : 0;
+        $reference = isset($_POST['reference']) ? sanitize_text_field($_POST['reference'])      : '';
 
         if (!$order_id || !$reference) {
             wp_send_json_error(array('message' => 'Invalid parameters'));
@@ -500,229 +383,150 @@ public function is_available() {
             wp_send_json_error(array('message' => 'Order not found'));
         }
 
-        // Check current status first (in case it was already processed by another request)
-        $current_status = $order->get_meta('_zwennpay_payment_status');
-        if ($current_status === 'paid') {
+        // Idempotent: if already paid just return the redirect URL
+        if ($order->has_status(array('processing', 'completed', 'paid')) ||
+            $order->get_meta('_zwennpay_payment_status') === 'paid') {
             wp_send_json_success(array(
                 'status'   => 'paid',
                 'redirect' => $order->get_checkout_order_received_url(),
             ));
         }
 
-        // Check if order is already in a final paid state
-        if ($order->has_status(array('processing', 'completed', 'paid'))) {
-            wp_send_json_success(array(
-                'status'   => 'paid',
-                'redirect' => $order->get_checkout_order_received_url(),
-            ));
-        }
-
-        // Call the status API
-        $status_url = self::STATUS_API_URL . '?referenceLabel=' . urlencode($reference);
-
-        $response = wp_remote_get($status_url, array(
-            'timeout'   => 10,
-            'sslverify' => false,
-            'headers'   => array(
-                'Accept'       => 'application/json',
-                'Content-Type' => 'application/json',
-            ),
-        ));
-
-        if (is_wp_error($response)) {
-            wp_send_json_error(array(
-                'message' => $response->get_error_message(),
-                'status'  => 'error',
-            ));
-        }
-
-        $code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        // Log the API response for debugging
-        $order->update_meta_data('_zwennpay_last_status_check', current_time('mysql'));
-        $order->update_meta_data('_zwennpay_last_status_response', $body);
-        $order->update_meta_data('_zwennpay_last_status_code', $code);
+        // Mark order as paid
+        $order->update_meta_data('_zwennpay_payment_status', 'paid');
+        $order->update_meta_data('_zwennpay_paid_at',        current_time('mysql'));
         $order->save();
 
-        // Handle non-JSON response
-        if (!$data) {
-            // Try to parse as text response
-            wp_send_json_error(array(
-                'message' => 'Invalid response from API',
-                'raw'     => substr($body, 0, 500),
-                'status'  => 'error',
-            ));
-        }
+        $order->payment_complete($reference);
+        $order->add_order_note(sprintf(
+            __('ZwennPay QR payment completed. Reference: %s', 'zwennpay-qr'),
+            $reference
+        ));
 
-        // Determine if payment is successful
-        // Check multiple possible response formats
-        $is_paid = $this->check_if_paid($data);
+        // Update transaction history
+        $this->record_transaction(
+            $order->get_order_number(),
+            $order->get_order_number(),
+            $reference,
+            floatval($order->get_total()),
+            'success'
+        );
 
-        if ($is_paid) {
-            // Mark order as paid
-            $order->update_meta_data('_zwennpay_payment_status', 'paid');
-            $order->update_meta_data('_zwennpay_paid_at', current_time('mysql'));
-            $order->update_meta_data('_zwennpay_api_response', $body);
-            $order->save();
-
-            // Complete the payment
-            $order->payment_complete();
-            $order->add_order_note(
-                sprintf(
-                    /* translators: %s: reference number */
-                    __('ZwennPay QR payment completed successfully. Reference: %s', 'zwennpay-qr'),
-                    $reference
-                )
-            );
-
-            wp_send_json_success(array(
-                'status'   => 'paid',
-                'redirect' => $order->get_checkout_order_received_url(),
-            ));
-        }
-
-        // Payment still pending
         wp_send_json_success(array(
-            'status' => 'pending',
+            'status'   => 'paid',
+            'redirect' => $order->get_checkout_order_received_url(),
         ));
     }
 
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
     /**
-     * Check if the API response indicates payment is successful
-     * Handles multiple possible response formats
+     * Record (insert or update) a transaction in the history table.
      */
-    private function check_if_paid($data) {
-        // Format 1: { "status": "SUCCESS" } or { "status": "Paid" }
-        if (isset($data['status'])) {
-            $status = strtoupper(trim($data['status']));
-            if (in_array($status, array('SUCCESS', 'PAID', 'COMPLETED', 'CONFIRMED'))) {
-                return true;
-            }
+    private function record_transaction($order_number, $bill_number, $reference_number, $amount, $status) {
+        if (isset($GLOBALS['zwennpay_qr_instance']) && method_exists($GLOBALS['zwennpay_qr_instance'], 'log_transaction')) {
+            $GLOBALS['zwennpay_qr_instance']->log_transaction($order_number, $bill_number, $reference_number, $amount, $status);
         }
-
-        // Format 2: { "paymentStatus": "SUCCESS" }
-        if (isset($data['paymentStatus'])) {
-            $status = strtoupper(trim($data['paymentStatus']));
-            if (in_array($status, array('SUCCESS', 'PAID', 'COMPLETED', 'CONFIRMED'))) {
-                return true;
-            }
-        }
-
-        // Format 3: { "paymentStatus": "1" } or { "status": 1 }
-        if (isset($data['paymentStatus']) && intval($data['paymentStatus']) === 1) {
-            return true;
-        }
-        if (isset($data['status']) && intval($data['status']) === 1) {
-            return true;
-        }
-
-        // Format 4: { "isPaid": true }
-        if (isset($data['isPaid']) && $data['isPaid'] === true) {
-            return true;
-        }
-
-        // Format 5: { "success": true }
-        if (isset($data['success']) && $data['success'] === true) {
-            return true;
-        }
-
-        // Format 6: { "transactionStatus": "SUCCESS" }
-        if (isset($data['transactionStatus'])) {
-            $status = strtoupper(trim($data['transactionStatus']));
-            if (in_array($status, array('SUCCESS', 'PAID', 'COMPLETED', 'CONFIRMED'))) {
-                return true;
-            }
-        }
-
-        // Format 7: { "result": "SUCCESS" }
-        if (isset($data['result'])) {
-            $result = strtoupper(trim($data['result']));
-            if (in_array($result, array('SUCCESS', 'PAID', 'COMPLETED', 'CONFIRMED'))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
-     * Build API request body for QR generation
+     * Build API request body.
+     *
+     * The order number is used as both the bill number AND passed as
+     * AdditionalBillNumber. SetAdditionalBillNumber and
+     * AdditionalRequiredBillNumber are ALWAYS true.
+     *
+     * Store label flags are driven by whether the stored option is non-empty.
+     *
+     * @param float  $amount
+     * @param string $order_number  WC order number (used as bill number)
+     * @param WC_Order $order
+     * @param array  $options       ZwennPay plugin options
      */
-    private function build_request_body($amount, $order_id, $order, $options) {
-        $tip      = floatval($options['convenience_tip'] ?? 0);
-        $feeFixed = floatval($options['convenience_fee_fixed'] ?? 0);
+    private function build_request_body($amount, $order_number, $order, $options) {
+        $tip      = floatval($options['convenience_tip']            ?? 0);
+        $feeFixed = floatval($options['convenience_fee_fixed']      ?? 0);
         $feePct   = floatval($options['convenience_fee_percentage'] ?? 0);
-        $bill     = !empty($options['bill_number']) ? $options['bill_number'] : strval($order_id);
-        $mobile   = $options['mobile_no'] ?? '';
-        $store    = $options['store_label'] ?? '';
-        $loyalty  = $options['loyalty_number'] ?? '';
-        $customer = !empty($order->get_billing_first_name()) ? $order->get_billing_first_name() : '';
-        $customer .= !empty($order->get_billing_last_name()) ? ' ' . $order->get_billing_last_name() : '';
-        $customer = trim($customer);
-        $terminal = $options['terminal_label'] ?? '';
-        $purpose  = !empty($options['purpose_transaction']) ? $options['purpose_transaction'] : 'Order #' . $order_id;
+        $mobile   = $options['mobile_no']     ?? '';
+        $store    = $options['store_label']   ?? '';
+        $loyalty  = $options['loyalty_number']?? '';
+        $terminal = $options['terminal_label']?? '';
+        $purpose  = !empty($options['purpose_transaction'])
+                    ? $options['purpose_transaction']
+                    : 'Order #' . $order_number;
+
+        // Customer label from billing name
+        $customer = trim(
+            ($order->get_billing_first_name() ?? '') . ' ' .
+            ($order->get_billing_last_name()  ?? '')
+        );
 
         return array(
-            "MerchantId"                           => absint($options['merchant_id']),
+            "MerchantId"                           => absint($options['merchant_id'] ?? 0),
+
             "SetTransactionAmount"                 => $amount > 0,
             "TransactionAmount"                    => $amount > 0 ? $amount : 0,
+
             "SetConvenienceIndicatorTip"            => $tip > 0,
             "ConvenienceIndicatorTip"               => $tip > 0 ? $tip : 0,
+
             "SetConvenienceFeeFixed"               => $feeFixed > 0,
             "ConvenienceFeeFixed"                  => $feeFixed > 0 ? $feeFixed : 0,
+
             "SetConvenienceFeePercentage"          => $feePct > 0,
             "ConvenienceFeePercentage"             => $feePct > 0 ? $feePct : 0,
+
+            // ── Bill Number = Order Number ──────────────────────────────────
+            // Both Set and Required are ALWAYS true so the API enforces it.
             "SetAdditionalBillNumber"              => true,
-            "AdditionalRequiredBillNumber"         => false,
-            "AdditionalBillNumber"                 => $bill,
+            "AdditionalRequiredBillNumber"         => true,
+            "AdditionalBillNumber"                 => strval($order_number),
+
             "SetAdditionalMobileNo"                => !empty($mobile),
             "AdditionalRequiredMobileNo"           => false,
             "AdditionalMobileNo"                   => !empty($mobile) ? $mobile : "string",
+
+            // ── Store Label: driven by option value ─────────────────────────
             "SetAdditionalStoreLabel"              => !empty($store),
-            "AdditionalRequiredStoreLabel"         => false,
+            "AdditionalRequiredStoreLabel"         => !empty($store),
             "AdditionalStoreLabel"                 => !empty($store) ? $store : "string",
+
             "SetAdditionalLoyaltyNumber"           => !empty($loyalty),
             "AdditionalRequiredLoyaltyNumber"      => false,
             "AdditionalLoyaltyNumber"              => !empty($loyalty) ? $loyalty : "string",
-            // Reference label is NOT set - it's auto-generated by the server in ID 62
+
+            // Reference label NOT set — auto-generated by server in ID 62
             "SetAdditionalReferenceLabel"          => false,
             "AdditionalRequiredReferenceLabel"     => false,
             "AdditionalReferenceLabel"             => "string",
+
             "SetAdditionalCustomerLabel"           => !empty($customer),
             "AdditionalRequiredCustomerLabel"      => false,
             "AdditionalCustomerLabel"              => !empty($customer) ? $customer : "string",
+
             "SetAdditionalTerminalLabel"           => !empty($terminal),
             "AdditionalRequiredTerminalLabel"      => false,
             "AdditionalTerminalLabel"              => !empty($terminal) ? $terminal : "string",
+
             "SetAdditionalPurposeTransaction"      => true,
             "AdditionalRequiredPurposeTransaction" => false,
             "AdditionalPurposeTransaction"         => $purpose,
         );
     }
 
-    /**
-     * Make API request to generate QR code
-     */
     private function api_request($body) {
         $response = wp_remote_post(self::API_URL, array(
             'timeout'     => 30,
-            'headers'     => array(
-                'Content-Type' => 'application/json',
-                'Accept'       => 'text/plain',
-            ),
+            'headers'     => array('Content-Type' => 'application/json', 'Accept' => 'text/plain'),
             'body'        => json_encode($body),
             'sslverify'   => false,
             'httpversion' => '1.1',
         ));
 
         if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'data'    => '',
-                'error'   => $response->get_error_message(),
-            );
+            return array('success' => false, 'data' => '', 'error' => $response->get_error_message());
         }
 
         $code          = wp_remote_retrieve_response_code($response);
@@ -736,9 +540,6 @@ public function is_available() {
         );
     }
 
-    /**
-     * Parse EMV TLV data
-     */
     private function parse_emv_data($qr_string) {
         $data = array();
         $i    = 0;
@@ -746,70 +547,41 @@ public function is_available() {
 
         while ($i < $len) {
             if ($i + 4 > $len) break;
-            
-            $id = substr($qr_string, $i, 2);
-            $i += 2;
-            
+            $id         = substr($qr_string, $i, 2); $i += 2;
             $length_str = substr($qr_string, $i, 2);
             if (!is_numeric($length_str)) break;
-            
-            $value_len = intval($length_str);
-            $i += 2;
-            
+            $value_len  = intval($length_str); $i += 2;
             if ($i + $value_len > $len) break;
-            
-            $value = substr($qr_string, $i, $value_len);
-            $i += $value_len;
-            
-            $data[$id] = $value;
+            $data[$id]  = substr($qr_string, $i, $value_len);
+            $i         += $value_len;
         }
 
         return $data;
     }
 
     /**
-     * Extract reference from EMV data
-     * Looks for ID 62, then parses sub-TLV to find ID 05 (reference label)
-     *
-     * Example EMV structure:
-     * 62 31
-     *     02 08 52578665
-     *     05 15 ZPMQR0000216738
+     * Extract reference label from EMV field 62, sub-TLV 05.
      */
     private function extract_reference_from_emv($qr_string) {
         $emv_data = $this->parse_emv_data($qr_string);
 
-        // Check if ID 62 exists
         if (!isset($emv_data['62'])) {
             return '';
         }
 
-        // Parse sub-TLV data within ID 62
         $sub_data = $this->parse_emv_data($emv_data['62']);
 
-        // Sub-TLV 05 contains the reference label
-        if (isset($sub_data['05'])) {
-            return $sub_data['05'];
-        }
-
-        return '';
+        return $sub_data['05'] ?? '';
     }
 
-    /**
-     * Generate base64-encoded QR code image
-     */
     private function generate_qr_base64($text, $size = 300) {
-        // Include phpqrcode library
         include_once plugin_dir_path(dirname(__FILE__)) . 'includes/phpqrcode/qrlib.php';
 
         $internal_size = max(600, intval($size) * 2);
         $module_size   = max(8, intval(round($internal_size / 60)));
+        $temp_file     = tempnam(sys_get_temp_dir(), 'zwqr_');
 
-        $temp_file = tempnam(sys_get_temp_dir(), 'zwqr_');
-        
-        if (!$temp_file) {
-            return '';
-        }
+        if (!$temp_file) return '';
 
         try {
             \QRcode::png($text, $temp_file, QR_ECLEVEL_L, $module_size, 2);
@@ -818,45 +590,27 @@ public function is_available() {
             $image_data = '';
         }
 
-        // Clean up temp file
-        if (file_exists($temp_file)) {
-            unlink($temp_file);
-        }
+        if (file_exists($temp_file)) unlink($temp_file);
 
-        if (empty($image_data)) {
-            return '';
-        }
+        if (empty($image_data)) return '';
 
         return 'data:image/png;base64,' . base64_encode($image_data);
     }
 
-    /**
-     * Process refund (optional support)
-     */
     public function process_refund($order_id, $amount = null, $reason = '') {
         $order = wc_get_order($order_id);
-        
-        if (!$order) {
-            return new WP_Error('error', __('Invalid order.', 'zwennpay-qr'));
-        }
-        
-        $order->add_order_note(
-            sprintf(
-                /* translators: %1$s: refund amount, %2$s: refund reason */
-                __('Refund of %1$s requested. Reason: %2$s. Process this refund through the ZwennPay dashboard.', 'zwennpay-qr'),
-                $amount ? wc_price($amount) : wc_price($order->get_total()),
-                $reason
-            )
-        );
+        if (!$order) return new WP_Error('error', __('Invalid order.', 'zwennpay-qr'));
+
+        $order->add_order_note(sprintf(
+            __('Refund of %1$s requested. Reason: %2$s. Process this refund through the ZwennPay dashboard.', 'zwennpay-qr'),
+            $amount ? wc_price($amount) : wc_price($order->get_total()),
+            $reason
+        ));
 
         return true;
     }
 
     public function payment_fields() {
-    if ($this->description) {
-        echo '<p>' . esc_html($this->description) . '</p>';
-    } else {
-        echo '<p>Pay using ZwennPay QR</p>';
+        echo '<p>' . esc_html($this->description ?: __('Scan to Pay', 'zwennpay-qr')) . '</p>';
     }
-}
 }
