@@ -1,0 +1,284 @@
+/**
+ * ZwennPay WooCommerce Checkout Styles
+ *
+ * @version 1.0.0
+ */
+
+.zwennpay-wc-payment {
+    max-width: 500px;
+    margin: 20px auto;
+    padding: 30px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* Header */
+.zwennpay-wc-header {
+    margin-bottom: 20px;
+}
+
+.zwennpay-wc-header h3 {
+    margin: 0 0 5px 0;
+    font-size: 22px;
+    color: #1a1a1a;
+}
+
+.zwennpay-wc-order-info {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+/* Amount */
+.zwennpay-wc-amount {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 15px 20px;
+    margin-bottom: 25px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.zwennpay-wc-amount-label {
+    font-size: 14px;
+    color: #666;
+}
+
+.zwennpay-wc-amount-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+/* QR Code Container */
+.zwennpay-wc-qr-container {
+    margin: 25px 0;
+    padding: 20px;
+    background: #fff;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    display: inline-block;
+}
+
+.zwennpay-wc-logo-top {
+    display: block;
+    margin: 0 auto 10px;
+    transform: scale(7.2);
+    height: 48px;
+    width: auto;
+}
+
+.zwennpay-wc-qr-image {
+    margin: 10px 0;
+    text-align: center;
+}
+
+.zwennpay-wc-qr-image img {
+    display: block;
+    margin: 0 auto;
+    width: 250px;
+    height: 250px;
+    max-width: 100%;
+    height: auto;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: pixelated;
+}
+
+.zwennpay-wc-logo-bottom {
+    display: block;
+    height: 35px;
+    width: auto;
+    margin: -10px auto 0;
+}
+
+/* Reference */
+.zwennpay-wc-reference {
+    margin: 15px 0;
+    padding: 10px;
+    background: #f0f4f8;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #555;
+}
+
+.zwennpay-wc-reference strong {
+    color: #1a1a1a;
+    font-family: "Courier New", monospace;
+}
+
+/* Instructions */
+.zwennpay-wc-instructions {
+    text-align: left;
+    margin: 25px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid #007cba;
+}
+
+.zwennpay-wc-instructions h4 {
+    margin: 0 0 10px 0;
+    font-size: 15px;
+    color: #1a1a1a;
+}
+
+.zwennpay-wc-instructions ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.zwennpay-wc-instructions li {
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.zwennpay-wc-instructions li:last-child {
+    margin-bottom: 0;
+}
+
+/* Status Section */
+.zwennpay-wc-status {
+    margin: 25px 0 15px;
+    padding: 20px;
+    background: #f0f7ff;
+    border-radius: 6px;
+    border: 1px solid #d0e3f7;
+}
+
+.zwennpay-wc-status-icon {
+    margin-bottom: 10px;
+}
+
+/* Custom Spinner */
+.zwennpay-wc-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #d0e3f7;
+    border-top-color: #007cba;
+    border-radius: 50%;
+    animation: zwennpay-spin 1s linear infinite;
+}
+
+.zwennpay-wc-spinner.zwennpay-spinner-hidden {
+    display: none;
+}
+
+@keyframes zwennpay-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Status Text */
+.zwennpay-wc-status-text {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.zwennpay-wc-status-waiting {
+    color: #007cba;
+}
+
+.zwennpay-wc-status-checking {
+    color: #007cba;
+    animation: zwennpay-pulse 1.5s ease-in-out infinite;
+}
+
+.zwennpay-wc-status-paid {
+    color: #00a32a;
+    font-weight: 600;
+}
+
+.zwennpay-wc-status-timeout {
+    color: #dc3232;
+    font-weight: 600;
+}
+
+.zwennpay-wc-status-error {
+    color: #dc3232;
+}
+
+@keyframes zwennpay-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Timer */
+.zwennpay-wc-timer {
+    margin-top: 15px;
+    font-size: 14px;
+    color: #666;
+}
+
+.zwennpay-wc-timer-label {
+    margin-right: 5px;
+}
+
+.zwennpay-wc-timer-value {
+    font-weight: 600;
+    font-family: "Courier New", monospace;
+    font-size: 18px;
+    color: #1a1a1a;
+    transition: color 0.3s ease;
+}
+
+.zwennpay-wc-timer-value.zwennpay-timer-warning {
+    color: #dc3232;
+    animation: zwennpay-pulse 0.5s ease-in-out infinite;
+}
+
+/* Footer Note */
+.zwennpay-wc-footer-note {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.zwennpay-wc-footer-note p {
+    margin: 5px 0;
+    font-size: 13px;
+    color: #888;
+}
+
+/* Success State - Update container */
+.zwennpay-wc-payment.zwennpay-paid .zwennpay-wc-qr-container {
+    border-color: #00a32a;
+    background: #f0fff4;
+}
+
+.zwennpay-wc-payment.zwennpay-timeout .zwennpay-wc-qr-container {
+    border-color: #dc3232;
+    background: #fff5f5;
+    opacity: 0.7;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .zwennpay-wc-payment {
+        margin: 10px;
+        padding: 20px;
+    }
+
+    .zwennpay-wc-amount {
+        flex-direction: column;
+        text-align: center;
+        gap: 5px;
+    }
+
+    .zwennpay-wc-qr-image img {
+        width: 200px;
+        height: 200px;
+    }
+
+    .zwennpay-wc-instructions {
+        padding: 12px;
+    }
+}

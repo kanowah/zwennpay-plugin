@@ -3,7 +3,7 @@
  * Plugin Name: ZwennPay QR Generator
  * Plugin URI: https://zwennpay.com/
  * Description: ZwennPay QR plugin for WordPress
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: ZwennPay
  * License: GPL v2 or later
  * Text Domain: zwennpay-qr
@@ -26,7 +26,6 @@ class ZwennPay_QR_Generator {
         add_action('admin_init',              array($this, 'register_settings'));
         add_action('admin_enqueue_scripts',   array($this, 'enqueue_admin_scripts'));
         add_action('wp_enqueue_scripts',      array($this, 'enqueue_frontend_scripts'));
-        add_shortcode('zwennpay_qr',          array($this, 'render_shortcode'));
         add_action('wp_ajax_zwennpay_test_connection',    array($this, 'ajax_test_connection'));
         add_action('wp_ajax_zwennpay_test_original',      array($this, 'ajax_test_original'));
         add_action('wp_ajax_zwennpay_generate_qr_admin',   array($this, 'ajax_generate_qr_admin'));
@@ -1014,3 +1013,94 @@ class ZwennPay_QR_Generator {
 
 register_activation_hook(__FILE__, array('ZwennPay_QR_Generator', 'activate'));
 new ZwennPay_QR_Generator();
+
+// DEBUG - Remove after testing
+error_log('=== ZWENNPAY DEBUG START ===');
+error_log('File exists: ' . (file_exists(plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php') ? 'YES' : 'NO'));
+error_log('WC active: ' . (class_exists('WooCommerce') ? 'YES' : 'NO'));
+error_log('Plugin file: ' . __FILE__);
+error_log('Gateway file: ' . plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php');
+
+// =============================================================================
+// WooCommerce Integration - Load Immediately
+// =============================================================================
+
+add_action('plugins_loaded', 'zwennpay_init_gateway', 11);
+
+function zwennpay_init_gateway() {
+
+    // Make sure WooCommerce is active
+    if (!class_exists('WooCommerce')) {
+        return;
+    }
+
+    // Load the gateway class
+    $gateway_file = plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-zwennpay.php';
+
+    if (file_exists($gateway_file)) {
+        require_once $gateway_file;
+    }
+}
+
+add_filter('woocommerce_payment_gateways', 'zwennpay_add_gateway_class');
+
+function zwennpay_add_gateway_class($gateways) {
+    error_log('zwennpay_add_gateway_class called with ' . count($gateways) . ' gateways');
+    
+    if (class_exists('WC_Gateway_Zwennpay')) {
+        $gateways[] = 'WC_Gateway_Zwennpay';
+        error_log('ZwennPay gateway ADDED');
+    } else {
+        error_log('ERROR: WC_Gateway_Zwennpay class not found!');
+    }
+    
+    return $gateways;
+}
+
+/* =========================
+ * ZwennPay Activation Setup
+ * ========================= */
+
+register_activation_hook(__FILE__, 'zwennpay_create_checkout_page');
+
+function zwennpay_create_checkout_page() {
+
+    // ✅ Check if WooCommerce is active
+    if (!class_exists('WooCommerce')) {
+
+        // Deactivate this plugin
+        deactivate_plugins(plugin_basename(__FILE__));
+
+        // Show error message
+        wp_die(
+            'ZwennPay requires WooCommerce to be installed and activated.',
+            'Plugin dependency check',
+            array('back_link' => true)
+        );
+
+        return;
+    }
+
+    // ✅ Create or get checkout page
+    $existing_page = get_page_by_path('zwennpay-checkout');
+
+    if ($existing_page) {
+        $page_id = $existing_page->ID;
+    } else {
+        $page_id = wp_insert_post(array(
+            'post_title'   => 'Checkout',
+            'post_name'    => 'zwennpay-checkout',
+            'post_content' => '[woocommerce_checkout]',
+            'post_status'  => 'publish',
+            'post_type'    => 'page',
+        ));
+    }
+
+    // ✅ Set as WooCommerce checkout page
+    if ($page_id && !is_wp_error($page_id)) {
+        update_option('woocommerce_checkout_page_id', $page_id);
+    }
+
+    // ✅ Refresh permalinks
+    flush_rewrite_rules();
+}
