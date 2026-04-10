@@ -404,7 +404,7 @@ Wait for payment confirmation", 'zwennpay-qr'),
 
         $order->payment_complete($reference);
         $order->add_order_note(sprintf(
-            __('ZwennPay QR payment completed. Reference: %s', 'zwennpay-qr'),
+            __('Scan to Pay payment completed. Reference: %s', 'zwennpay-qr'),
             $reference
         ));
 
