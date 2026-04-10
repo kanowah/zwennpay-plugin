@@ -472,8 +472,208 @@
 #zwennpay-preview-box {
     background-color: #ffffff !important;
 }
-/* Responsive */
-@media screen and (max-width: 782px) {
+/* ZwennPay QR Admin Styles v1.5.0 */
+
+/* ── Tab wrapper & content ──────────────────────────────── */
+.zwennpay-tab-nav .nav-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.zwennpay-tab-content {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-top: none;
+    padding: 20px 24px 28px;
+}
+
+/* ── Settings layout ────────────────────────────────────── */
+.zwennpay-settings-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.zwennpay-settings-main {
+    flex: 1 1 420px;
+    min-width: 0;
+}
+
+.zwennpay-settings-sidebar {
+    flex: 0 0 260px;
+}
+
+/* ── Preview box ────────────────────────────────────────── */
+.zwennpay-preview-box {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 16px;
+    background: #fafafa;
+    text-align: center;
+}
+
+#zwennpay-preview-container {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 0 8px;
+}
+
+.zwennpay-preview-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.zwennpay-preview-buttons .button {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+}
+
+/* ── History toolbar ────────────────────────────────────── */
+.zwennpay-history-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+/* Search bar */
+.zwennpay-search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 240px;
+    max-width: 380px;
+}
+
+.zwennpay-search-bar .zwennpay-search-icon {
+    position: absolute;
+    left: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #888;
+    font-size: 18px;
+    pointer-events: none;
+}
+
+.zwennpay-search-bar input[type="text"] {
+    width: 100%;
+    padding: 6px 32px 6px 34px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    font-size: 13px;
+    height: 34px;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.zwennpay-search-bar input[type="text"]:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.zwennpay-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #888;
+    font-size: 14px;
+    line-height: 1;
+    padding: 2px 4px;
+    transition: color 0.1s;
+}
+
+.zwennpay-search-clear:hover { color: #d63638; }
+
+/* Filter row */
+.zwennpay-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.zwennpay-filter-bar select {
+    height: 34px;
+    font-size: 13px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 0 25px 0 15px;
+    cursor: pointer;
+}
+
+/* ── Logs card / table ──────────────────────────────────── */
+.zwennpay-logs-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.zwennpay-logs-table {
+    margin: 0 !important;
+    border: none !important;
+}
+
+.zwennpay-logs-table th,
+.zwennpay-logs-table td {
+    padding: 10px 12px !important;
+    vertical-align: middle;
+}
+
+.zwennpay-logs-table thead th {
+    background: #f6f7f7;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #50575e;
+}
+
+/* ── Pagination ─────────────────────────────────────────── */
+#zwennpay-tx-pagination {
+    border-top: 1px solid #c3c4c7;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tablenav-pages .displaying-num {
+    color: #646970;
+    font-size: 13px;
+    margin-right: 8px;
+}
+
+.page-numbers.current {
+    background: #2271b1 !important;
+    color: #fff !important;
+    border-color: #2271b1 !important;
+    cursor: default;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 782px) {
+    .zwennpay-settings-layout  { flex-direction: column; }
+    .zwennpay-settings-sidebar { flex: 1 1 100%; }
+    .zwennpay-history-toolbar  { flex-direction: column; align-items: stretch; }
+    .zwennpay-search-bar       { max-width: 100%; }
     .zwennpay-logs-table thead {
         display: none;
     }

@@ -55,7 +55,6 @@ WooCommerce → Settings → Payments
 2. Enable **ZwennPay QR**
 
 3. Configure:
-- API URL
 - Merchant details
 - Payment instructions (optional)
 
@@ -66,8 +65,8 @@ WooCommerce → Settings → Payments
 ## 💳 How It Works
 
 1. Customer places an order
-2. ZwennPay displays a QR code
-3. Customer scans using mobile banking app
+2. ZwennPay displays a Scan and Pay QR code
+3. Customer scans using any mobile banking app
 4. Payment status is checked automatically
 5. Order updates upon successful payment
 
