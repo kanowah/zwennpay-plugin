@@ -43,8 +43,10 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
         $this->enabled         = $this->get_option('enabled');
         $this->title           = $this->get_option('title');
         $this->description     = $this->get_option('description');
-        $this->timeout_minutes = intval($this->get_option('timeout_minutes', self::DEFAULT_TIMEOUT_MINUTES));
-        $this->check_interval  = intval($this->get_option('check_interval_seconds', self::DEFAULT_INTERVAL_SECONDS));
+        /*$this->timeout_minutes = apply_filters('zwennpay_timeout', self::DEFAULT_TIMEOUT_MINUTES);
+        $this->check_interval  = apply_filters('zwennpay_interval', self::DEFAULT_INTERVAL_SECONDS);*/
+        $this->timeout_minutes = self::DEFAULT_TIMEOUT_MINUTES;
+        $this->check_interval  = self::DEFAULT_INTERVAL_SECONDS;
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
         add_action('wp_ajax_zwennpay_wc_confirm_payment',        array($this, 'ajax_confirm_payment'));
@@ -75,7 +77,7 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                 'default'     => __('Scan the QR code with your mobile banking app to complete payment.', 'zwennpay-qr'),
                 'desc_tip'    => true,
             ),
-            'timeout_minutes' => array(
+           /* 'timeout_minutes' => array(
                 'title'       => __('Payment Timeout (minutes)', 'zwennpay-qr'),
                 'type'        => 'number',
                 'description' => __('How long to wait for payment before timing out.', 'zwennpay-qr'),
@@ -92,15 +94,15 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                 'min'         => 5,
                 'max'         => 60,
                 'desc_tip'    => true,
-            ),
+            ),*/
             'instructions' => array(
                 'title'       => __('Instructions', 'zwennpay-qr'),
                 'type'        => 'textarea',
                 'description' => __('Instructions shown on the payment page after order placement.', 'zwennpay-qr'),
-                'default' => __("1. Open your mobile banking app
-2. Scan the QR code below
-3. Confirm the payment amount
-4. Wait for payment confirmation", 'zwennpay-qr'),
+                'default' => __("Open your mobile banking app
+Scan the QR code below
+Confirm the payment amount
+Wait for payment confirmation", 'zwennpay-qr'),
                 'desc_tip'    => true,
             ),
         );
