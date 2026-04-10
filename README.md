@@ -88,7 +88,7 @@ On activation, the plugin can automatically:
 - Ensure the payment gateway is enabled
 
 - **QR not loading or API errors?**
-- Verify API URL and credentials
+- Verify credentials
 - Check browser console for errors
 
 ---
