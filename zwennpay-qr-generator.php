@@ -747,7 +747,6 @@ class ZwennPay_QR_Generator {
                     </form>
                 </div>
 
-                <!-- Sidebar preview -->
                 <div class="zwennpay-settings-sidebar">
                     <div class="zwennpay-preview-box" id="zwennpay-preview-box">
                         <div id="zwennpay-preview-container">
@@ -768,7 +767,6 @@ class ZwennPay_QR_Generator {
                     </div>
                 </div>
 
-                <!-- Transaction History Section -->
                 <div class="zwennpay-history-section" style="margin-bottom:20px;">
                     <div class="zwennpay-history-header" style="display:flex;justify-content:space-between;align-items:center;">
                         <h2 style="margin:0;font-size:1.3em;">
@@ -806,8 +804,8 @@ class ZwennPay_QR_Generator {
                     </div>
                 </div>
 
-            </div><!-- .zwennpay-settings-layout -->
-        </div><!-- .wrap -->
+            </div>
+        </div>
         <?php
     }
 }
