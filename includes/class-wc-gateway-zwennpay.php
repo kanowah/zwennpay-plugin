@@ -67,7 +67,7 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
                 'title'       => __('Title', 'zwennpay-qr'),
                 'type'        => 'text',
                 'description' => __('Payment method title that the customer sees on checkout.', 'zwennpay-qr'),
-                'default'     => __('ZwennPay QR', 'zwennpay-qr'),
+                'default'     => __('Scan to Pay', 'zwennpay-qr'),
                 'desc_tip'    => true,
             ),
             'description' => array(

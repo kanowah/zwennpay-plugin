@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ZwennPay QR Generator
  * Plugin URI: https://zwennpay.com/
- * Description: ZwennPay QR plugin for WordPress
+ * Description: The official ZwennPay plugin that enables QR code payments directly on your WooCommerce checkout page.
  * Version: 1.3.0
  * Author: ZwennPay
  * License: GPL v2 or later
