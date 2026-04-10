@@ -88,22 +88,7 @@ class WC_Gateway_Zwennpay extends WC_Payment_Gateway {
             ),
         );
     }
-
-    /**
-     * is_available()
-     *
-     * ── FIX for block-cart "Proceed to Checkout" infinite spinner ──────────
-     *
-     * The original check `if (!WC()->cart) return false;` caused the gateway
-     * to report itself as unavailable during WooCommerce Blocks' server-side
-     * availability checks (REST API / Store API calls), where the cart object
-     * is not yet fully initialised.  WooCommerce Blocks then fell back to
-     * showing a spinner and never resolved.
-     *
-     * The fix: remove the manual cart check entirely.  WooCommerce itself
-     * guards gateway availability in all the right places; we don't need to
-     * second-guess it here.
-     */
+    
     public function is_available() {
         // Let WooCommerce handle cart/context checks — never return false
         // solely because WC()->cart is null (happens during Blocks API calls).
